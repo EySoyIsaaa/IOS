@@ -1,0 +1,28 @@
+PODS:
+  - Capacitor (6.2.1):
+    - CapacitorCordova
+  - CapacitorCordova (6.2.1)
+  - EpicenterNative (0.0.1):
+    - Capacitor
+
+DEPENDENCIES:
+  - "Capacitor (from `../../node_modules/.pnpm/@capacitor+ios@6.2.1_@capacitor+core@6.2.1/node_modules/@capacitor/ios`)"
+  - "CapacitorCordova (from `../../node_modules/.pnpm/@capacitor+ios@6.2.1_@capacitor+core@6.2.1/node_modules/@capacitor/ios`)"
+  - "EpicenterNative (from `../../node_modules/.pnpm/@epicenter+native@file+plugins+epicenter-native_@capacitor+core@6.2.1/node_modules/@epicenter/native`)"
+
+EXTERNAL SOURCES:
+  Capacitor:
+    :path: "../../node_modules/.pnpm/@capacitor+ios@6.2.1_@capacitor+core@6.2.1/node_modules/@capacitor/ios"
+  CapacitorCordova:
+    :path: "../../node_modules/.pnpm/@capacitor+ios@6.2.1_@capacitor+core@6.2.1/node_modules/@capacitor/ios"
+  EpicenterNative:
+    :path: "../../node_modules/.pnpm/@epicenter+native@file+plugins+epicenter-native_@capacitor+core@6.2.1/node_modules/@epicenter/native"
+
+SPEC CHECKSUMS:
+  Capacitor: c95400d761e376be9da6be5a05f226c0e865cebf
+  CapacitorCordova: 8d93e14982f440181be7304aa9559ca631d77fff
+  EpicenterNative: cbf314f77f5acd4daea056cf50e5de4da208a6be
+
+PODFILE CHECKSUM: fb1c1222c3697dafdedb3cfcd8d4a4827ea79c54
+
+COCOAPODS: 1.15.2

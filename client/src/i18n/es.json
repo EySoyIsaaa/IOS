@@ -217,7 +217,7 @@
     "title": "Cómo usar Epicenter Hi-Fi",
     "intro": "Epicenter Hi-Fi v7.0.0 es un reproductor local con énfasis en Epicenter DSP e implementación de IA para experiencias de audio inteligentes.",
     "libraryTitle": "1. Importa tu música",
-    "libraryBody": "Usa la pantalla principal de la biblioteca para importar archivos manualmente o escanear tu dispositivo en Android.",
+    "libraryBody": "Usa la pantalla principal de la biblioteca para importar archivos manualmente.",
     "playerTitle": "2. Inicia la reproducción",
     "playerBody": "Selecciona cualquier canción o usa los botones Reproducir y Aleatorio en Música, Artistas o Playlists.",
     "queueTitle": "3. Gestiona la cola",

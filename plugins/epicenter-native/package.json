@@ -1,0 +1,21 @@
+{
+  "name": "@epicenter/native",
+  "version": "0.0.1",
+  "description": "Epicenter iOS native Capacitor plugin",
+  "license": "MIT",
+  "main": "dist/plugin.cjs.js",
+  "types": "dist/esm/index.d.ts",
+  "files": [
+    "ios",
+    "EpicenterNative.podspec",
+    "package.json"
+  ],
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=6.0.0"
+  }
+}
