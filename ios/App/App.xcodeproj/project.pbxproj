@@ -1,0 +1,100 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+/* Begin PBXBuildFile section */
+		846B9F8FC92ED99DAD2DDF5B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAD8D4C1D7F0D6DD7F8B8A94 /* AppDelegate.swift */; };
+		700F1DFF4653EB3EF284CC15 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 855A5F1BCEEDB5ACB9ACC1A6 /* ViewController.swift */; };
+		9E36A45B67DA6CE3CC2A430A /* NativeAudioModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33DBE98FDCD38475B4640045 /* NativeAudioModels.swift */; };
+		64BD74EA3AA54C879C5C9E33 /* NativeAudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6846466A087145DF2E1CBFF /* NativeAudioEngine.swift */; };
+		D2ACA24107E7C19608A2A926 /* NativePlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA6A8C51F43ED9AE6459FA1 /* NativePlaybackController.swift */; };
+		C8B3CCE4BEB98B794BA41F16 /* NativeQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D66B0657E7017F57D6976536 /* NativeQueueManager.swift */; };
+		66E888B6B34E53F90301745E /* NativeAudioSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE2B741465D0FF7B6CAAB5CE /* NativeAudioSessionManager.swift */; };
+		754391B40C12ADD658DF4D24 /* NowPlayingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C3D56C0B2D17807068818AD /* NowPlayingManager.swift */; };
+		2D6AA558E0B885177FE766AB /* RemoteCommandManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8D0E940C514FCD8BE75EA9 /* RemoteCommandManager.swift */; };
+		AE3A5C55015854F673EC23A9 /* NativeLibraryDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A3047637C02DAD37D554209 /* NativeLibraryDatabase.swift */; };
+		DC44EF2ADE63C7D6A6BA9D04 /* NativeTrackImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76053FCCDD0749041649F63D /* NativeTrackImporter.swift */; };
+		A710D295CDE507A4FFCBE970 /* NativeTrackRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3567001E7E2CC57C9331A66E /* NativeTrackRepository.swift */; };
+		5C03EE583FA3F83F9D8B9E8B /* EQ31BandProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2CC4C441A4109211F7E7E98 /* EQ31BandProcessor.swift */; };
+		345E8267BF5EED992A85FC09 /* ReverbProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2FFC199E05CF0CD419A3E58 /* ReverbProcessor.swift */; };
+		1F2F89C049BB7A37E025FCD7 /* AudioLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AFC605BA5FD5C380F12EBDD /* AudioLimiter.swift */; };
+		0BEC8C72935884D6A451C892 /* EpicenterDSPCore.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 76DCC21372EC6A5C5B35592E /* EpicenterDSPCore.cpp */; };
+		0D11CA1B9D76FC662F6CE1FC /* EpicenterDSPBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = 10E603B1D5FCC22DF78AEBF0 /* EpicenterDSPBridge.mm */; };
+		CC112C374B6483B0A3B6FCC0 /* EpicenterNativePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E32212782D083532D35FCF1 /* EpicenterNativePlugin.swift */; };
+		A6070B9CF28E71610AA267AE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F4520D96AC0EDB42E750BB2B /* Assets.xcassets */; };
+		4D8E0FCFA47D6ED078BE42E7 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 16D02E8C97C0A82CF052E227 /* LaunchScreen.storyboard */; };
+		2CB23FAA8366BB036608A471 /* public in Resources */ = {isa = PBXBuildFile; fileRef = 773CA182ACD405D4D69551AD /* public */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		EAD8D4C1D7F0D6DD7F8B8A94 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		855A5F1BCEEDB5ACB9ACC1A6 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		33DBE98FDCD38475B4640045 /* NativeAudioModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAudio/NativeAudioModels.swift; sourceTree = "<group>"; };
+		D6846466A087145DF2E1CBFF /* NativeAudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAudio/NativeAudioEngine.swift; sourceTree = "<group>"; };
+		0FA6A8C51F43ED9AE6459FA1 /* NativePlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAudio/NativePlaybackController.swift; sourceTree = "<group>"; };
+		D66B0657E7017F57D6976536 /* NativeQueueManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAudio/NativeQueueManager.swift; sourceTree = "<group>"; };
+		AE2B741465D0FF7B6CAAB5CE /* NativeAudioSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAudio/NativeAudioSessionManager.swift; sourceTree = "<group>"; };
+		4C3D56C0B2D17807068818AD /* NowPlayingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAudio/NowPlayingManager.swift; sourceTree = "<group>"; };
+		AC8D0E940C514FCD8BE75EA9 /* RemoteCommandManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAudio/RemoteCommandManager.swift; sourceTree = "<group>"; };
+		6A3047637C02DAD37D554209 /* NativeLibraryDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAudio/NativeLibraryDatabase.swift; sourceTree = "<group>"; };
+		76053FCCDD0749041649F63D /* NativeTrackImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAudio/NativeTrackImporter.swift; sourceTree = "<group>"; };
+		3567001E7E2CC57C9331A66E /* NativeTrackRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAudio/NativeTrackRepository.swift; sourceTree = "<group>"; };
+		D2CC4C441A4109211F7E7E98 /* EQ31BandProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DSP/EQ31BandProcessor.swift; sourceTree = "<group>"; };
+		B2FFC199E05CF0CD419A3E58 /* ReverbProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DSP/ReverbProcessor.swift; sourceTree = "<group>"; };
+		9AFC605BA5FD5C380F12EBDD /* AudioLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DSP/AudioLimiter.swift; sourceTree = "<group>"; };
+		76DCC21372EC6A5C5B35592E /* EpicenterDSPCore.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = DSP/EpicenterDSPCore.cpp; sourceTree = "<group>"; };
+		10E603B1D5FCC22DF78AEBF0 /* EpicenterDSPBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DSP/EpicenterDSPBridge.mm; sourceTree = "<group>"; };
+		8E32212782D083532D35FCF1 /* EpicenterNativePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plugins/EpicenterNativePlugin.swift; sourceTree = "<group>"; };
+		D5F9B55768CD1BA1C6A5F7A0 /* EpicenterDSPCore.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = DSP/EpicenterDSPCore.hpp; sourceTree = "<group>"; };
+		3F25B911581A7553F64BBF52 /* EpicenterDSPBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DSP/EpicenterDSPBridge.h; sourceTree = "<group>"; };
+		F4520D96AC0EDB42E750BB2B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		16D02E8C97C0A82CF052E227 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		773CA182ACD405D4D69551AD /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
+		12F1C9823B7D241C34392D7F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C67CB88D4A35A8931CA9EF0B /* capacitor.config.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
+		DEA271EF3F6664F0BF97A51D /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		424153ED3CD079DB4DB459AF /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = ( ); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		518DA81DB9B99529C0C0AEBE = {isa = PBXGroup; children = ( 82CF2A43A7100F086D7FCFDD /* App */, 547D009064F7C3F13BEF3460 /* Products */, ); sourceTree = "<group>"; };
+		82CF2A43A7100F086D7FCFDD /* App */ = {isa = PBXGroup; children = ( EAD8D4C1D7F0D6DD7F8B8A94 /* AppDelegate.swift */, 855A5F1BCEEDB5ACB9ACC1A6 /* ViewController.swift */, 33DBE98FDCD38475B4640045 /* NativeAudioModels.swift */, D6846466A087145DF2E1CBFF /* NativeAudioEngine.swift */, 0FA6A8C51F43ED9AE6459FA1 /* NativePlaybackController.swift */, D66B0657E7017F57D6976536 /* NativeQueueManager.swift */, AE2B741465D0FF7B6CAAB5CE /* NativeAudioSessionManager.swift */, 4C3D56C0B2D17807068818AD /* NowPlayingManager.swift */, AC8D0E940C514FCD8BE75EA9 /* RemoteCommandManager.swift */, 6A3047637C02DAD37D554209 /* NativeLibraryDatabase.swift */, 76053FCCDD0749041649F63D /* NativeTrackImporter.swift */, 3567001E7E2CC57C9331A66E /* NativeTrackRepository.swift */, D2CC4C441A4109211F7E7E98 /* EQ31BandProcessor.swift */, B2FFC199E05CF0CD419A3E58 /* ReverbProcessor.swift */, 9AFC605BA5FD5C380F12EBDD /* AudioLimiter.swift */, 76DCC21372EC6A5C5B35592E /* EpicenterDSPCore.cpp */, 10E603B1D5FCC22DF78AEBF0 /* EpicenterDSPBridge.mm */, 8E32212782D083532D35FCF1 /* EpicenterNativePlugin.swift */, D5F9B55768CD1BA1C6A5F7A0 /* EpicenterDSPCore.hpp */, 3F25B911581A7553F64BBF52 /* EpicenterDSPBridge.h */, F4520D96AC0EDB42E750BB2B /* Assets.xcassets */, 16D02E8C97C0A82CF052E227 /* LaunchScreen.storyboard */, 773CA182ACD405D4D69551AD /* public */, 12F1C9823B7D241C34392D7F /* Info.plist */, C67CB88D4A35A8931CA9EF0B /* capacitor.config.json */, ); path = App; sourceTree = "<group>"; }};
+		547D009064F7C3F13BEF3460 /* Products */ = {isa = PBXGroup; children = ( DEA271EF3F6664F0BF97A51D /* App.app */, ); name = Products; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1E35EF3981470D981F810B0F /* App */ = {isa = PBXNativeTarget; buildConfigurationList = 354589B28580510B6EC24620 /* Build configuration list for PBXNativeTarget "App" */; buildPhases = ( 7A70D71C385290AF96BF1031 /* Sources */, 424153ED3CD079DB4DB459AF /* Frameworks */, 285BB1C1430063331E9F5DD0 /* Resources */, ); buildRules = ( ); dependencies = ( ); name = App; productName = App; productReference = DEA271EF3F6664F0BF97A51D /* App.app */; productType = "com.apple.product-type.application"; };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		46F86FAA6BBF9AC94A7E4595 /* Project object */ = {isa = PBXProject; attributes = {LastSwiftUpdateCheck = 1500; LastUpgradeCheck = 1500; TargetAttributes = { 1E35EF3981470D981F810B0F = {CreatedOnToolsVersion = 15.0; LastSwiftMigration = 1500; }; }; }; buildConfigurationList = 1F4E3D13C2320EDA50221924 /* Build configuration list for PBXProject "App" */; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = ( en, Base, ); mainGroup = 518DA81DB9B99529C0C0AEBE; productRefGroup = 547D009064F7C3F13BEF3460 /* Products */; projectDirPath = ""; projectRoot = ""; targets = ( 1E35EF3981470D981F810B0F /* App */, ); };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		285BB1C1430063331E9F5DD0 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ( A6070B9CF28E71610AA267AE /* resource */, 4D8E0FCFA47D6ED078BE42E7 /* resource */, 2CB23FAA8366BB036608A471 /* resource */, ); runOnlyForDeploymentPostprocessing = 0; }};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7A70D71C385290AF96BF1031 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ( 846B9F8FC92ED99DAD2DDF5B /* source */, 700F1DFF4653EB3EF284CC15 /* source */, 9E36A45B67DA6CE3CC2A430A /* source */, 64BD74EA3AA54C879C5C9E33 /* source */, D2ACA24107E7C19608A2A926 /* source */, C8B3CCE4BEB98B794BA41F16 /* source */, 66E888B6B34E53F90301745E /* source */, 754391B40C12ADD658DF4D24 /* source */, 2D6AA558E0B885177FE766AB /* source */, AE3A5C55015854F673EC23A9 /* source */, DC44EF2ADE63C7D6A6BA9D04 /* source */, A710D295CDE507A4FFCBE970 /* source */, 5C03EE583FA3F83F9D8B9E8B /* source */, 345E8267BF5EED992A85FC09 /* source */, 1F2F89C049BB7A37E025FCD7 /* source */, 0BEC8C72935884D6A451C892 /* source */, 0D11CA1B9D76FC662F6CE1FC /* source */, CC112C374B6483B0A3B6FCC0 /* source */, ); runOnlyForDeploymentPostprocessing = 0; }};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		4A43692AD8BCEEB8B727C85B /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ANALYZER_NONNULL = YES; CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE; CLANG_CXX_LANGUAGE_STANDARD = gnu++20; CLANG_CXX_LIBRARY = libc++; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CLANG_ENABLE_OBJC_WEAK = YES; CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES; CLANG_WARN_BOOL_CONVERSION = YES; CLANG_WARN_COMMA = YES; CLANG_WARN_CONSTANT_CONVERSION = YES; CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES; CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR; CLANG_WARN_DOCUMENTATION_COMMENTS = YES; CLANG_WARN_EMPTY_BODY = YES; CLANG_WARN_ENUM_CONVERSION = YES; CLANG_WARN_INFINITE_RECURSION = YES; CLANG_WARN_INT_CONVERSION = YES; CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES; CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES; CLANG_WARN_OBJC_LITERAL_CONVERSION = YES; CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR; CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES; CLANG_WARN_RANGE_LOOP_ANALYSIS = YES; CLANG_WARN_STRICT_PROTOTYPES = YES; CLANG_WARN_SUSPICIOUS_MOVE = YES; CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE; CLANG_WARN_UNREACHABLE_CODE = YES; CLANG_WARN__DUPLICATE_METHOD_MATCH = YES; COPY_PHASE_STRIP = NO; DEBUG_INFORMATION_FORMAT = dwarf; ENABLE_STRICT_OBJC_MSGSEND = YES; ENABLE_TESTABILITY = YES; GCC_C_LANGUAGE_STANDARD = gnu11; GCC_DYNAMIC_NO_PIC = NO; GCC_NO_COMMON_BLOCKS = YES; GCC_OPTIMIZATION_LEVEL = 0; GCC_PREPROCESSOR_DEFINITIONS = ("DEBUG=1", "$(inherited)"); GCC_WARN_64_TO_32_BIT_CONVERSION = YES; GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR; GCC_WARN_UNDECLARED_SELECTOR = YES; GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE; GCC_WARN_UNUSED_FUNCTION = YES; GCC_WARN_UNUSED_VARIABLE = YES; IPHONEOS_DEPLOYMENT_TARGET = 14.0; MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE; MTL_FAST_MATH = YES; ONLY_ACTIVE_ARCH = YES; SDKROOT = iphoneos; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; SWIFT_OPTIMIZATION_LEVEL = -Onone; }; name = Debug; };
+		C28449456A5A705A7479770B /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ANALYZER_NONNULL = YES; CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE; CLANG_CXX_LANGUAGE_STANDARD = gnu++20; CLANG_CXX_LIBRARY = libc++; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CLANG_ENABLE_OBJC_WEAK = YES; CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES; CLANG_WARN_BOOL_CONVERSION = YES; CLANG_WARN_COMMA = YES; CLANG_WARN_CONSTANT_CONVERSION = YES; CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES; CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR; CLANG_WARN_DOCUMENTATION_COMMENTS = YES; CLANG_WARN_EMPTY_BODY = YES; CLANG_WARN_ENUM_CONVERSION = YES; CLANG_WARN_INFINITE_RECURSION = YES; CLANG_WARN_INT_CONVERSION = YES; CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES; CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES; CLANG_WARN_OBJC_LITERAL_CONVERSION = YES; CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR; CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES; CLANG_WARN_RANGE_LOOP_ANALYSIS = YES; CLANG_WARN_STRICT_PROTOTYPES = YES; CLANG_WARN_SUSPICIOUS_MOVE = YES; CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE; CLANG_WARN_UNREACHABLE_CODE = YES; CLANG_WARN__DUPLICATE_METHOD_MATCH = YES; COPY_PHASE_STRIP = YES; DEBUG_INFORMATION_FORMAT = dwarf-with-dsym; ENABLE_STRICT_OBJC_MSGSEND = YES; ENABLE_TESTABILITY = NO; GCC_C_LANGUAGE_STANDARD = gnu11; GCC_DYNAMIC_NO_PIC = YES; GCC_NO_COMMON_BLOCKS = YES; GCC_OPTIMIZATION_LEVEL = s; GCC_PREPROCESSOR_DEFINITIONS = $(inherited); GCC_WARN_64_TO_32_BIT_CONVERSION = YES; GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR; GCC_WARN_UNDECLARED_SELECTOR = YES; GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE; GCC_WARN_UNUSED_FUNCTION = YES; GCC_WARN_UNUSED_VARIABLE = YES; IPHONEOS_DEPLOYMENT_TARGET = 14.0; MTL_ENABLE_DEBUG_INFO = NO; MTL_FAST_MATH = YES; ONLY_ACTIVE_ARCH = NO; SDKROOT = iphoneos; SWIFT_ACTIVE_COMPILATION_CONDITIONS = ""; SWIFT_OPTIMIZATION_LEVEL = -O; }; name = Release; };
+		4D8F6610AF6606489ED8DFBC /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = App/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 14.0; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks"); MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.epicenter.hifi; PRODUCT_NAME = "EpicenterDSP Player"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
+		3DDF142C91E4BE3A6BA5A69E /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = App/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 14.0; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks"); MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.epicenter.hifi; PRODUCT_NAME = "EpicenterDSP Player"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1F4E3D13C2320EDA50221924 /* Build configuration list for PBXProject "App" */ = {isa = XCConfigurationList; buildConfigurations = ( 4A43692AD8BCEEB8B727C85B /* Debug */, C28449456A5A705A7479770B /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		354589B28580510B6EC24620 /* Build configuration list for PBXNativeTarget "App" */ = {isa = XCConfigurationList; buildConfigurations = ( 4D8F6610AF6606489ED8DFBC /* Debug */, 3DDF142C91E4BE3A6BA5A69E /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+	};
+	rootObject = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
+}

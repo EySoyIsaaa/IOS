@@ -1,0 +1,14 @@
+platform :ios, '14.0'
+use_frameworks!
+
+install! 'cocoapods', :disable_input_output_paths => true
+
+def capacitor_pods
+  capacitor_pods_path = '../../node_modules/@capacitor/ios'
+  pod 'Capacitor', :path => capacitor_pods_path
+  pod 'CapacitorCordova', :path => "#{capacitor_pods_path}/CapacitorCordova"
+end
+
+target 'App' do
+  capacitor_pods
+end
