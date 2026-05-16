@@ -8,23 +8,52 @@ public class EpicenterNativePlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "importTracks", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getLibraryPage", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getTrack", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "deleteTrack", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPlaybackState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "play", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pause", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "seek", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setQueue", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "next", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "previous", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setEpicenterEnabled", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setEqBands", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setReverbEnabled", returnType: CAPPluginReturnPromise),
     ]
 
-    private let importer = NativeTrackImporter()
     private let repository = NativeTrackRepository()
-    private let playbackController = NativePlaybackController()
+    private lazy var importer = NativeTrackImporter(repository: repository)
+    private lazy var playbackController = NativePlaybackController(repository: repository)
     private let eqProcessor = EQ31BandProcessor()
     private let reverbProcessor = ReverbProcessor()
 
+    public override func load() {
+        playbackController.setEventEmitter { [weak self] eventName, data in
+            self?.notifyListeners(eventName, data: data)
+        }
+    }
+
     @objc func importTracks(_ call: CAPPluginCall) {
-        call.resolve(importer.importTracks())
+        guard let presenter = bridge?.viewController else {
+            call.reject("Unable to present the iOS document picker")
+            return
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            self?.importer.importTracks(from: presenter) { result in
+                switch result {
+                case .success(let tracks):
+                    call.resolve([
+                        "status": "ok",
+                        "tracks": tracks.map { $0.dictionary },
+                    ])
+                case .failure(let error):
+                    call.reject("Unable to import tracks", nil, error)
+                }
+            }
+        }
     }
 
     @objc func getLibraryPage(_ call: CAPPluginCall) {
@@ -35,23 +64,59 @@ public class EpicenterNativePlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve(repository.getLibraryPage(offset: offset, limit: limit, search: search, sort: sort))
     }
 
+    @objc func getTrack(_ call: CAPPluginCall) {
+        guard let id = call.getString("id"), !id.isEmpty else {
+            call.reject("Track id is required")
+            return
+        }
+        call.resolve(repository.getTrack(id: id))
+    }
+
+    @objc func deleteTrack(_ call: CAPPluginCall) {
+        guard let id = call.getString("id"), !id.isEmpty else {
+            call.reject("Track id is required")
+            return
+        }
+        do {
+            call.resolve(try repository.deleteTrack(id: id))
+        } catch {
+            call.reject("Unable to delete track", nil, error)
+        }
+    }
+
     @objc func getPlaybackState(_ call: CAPPluginCall) {
         call.resolve(playbackController.getPlaybackState())
     }
 
     @objc func play(_ call: CAPPluginCall) {
-        call.resolve(playbackController.notImplementedResponse("play"))
+        call.resolve(playbackController.play(trackId: call.getString("trackId")))
     }
 
     @objc func pause(_ call: CAPPluginCall) {
-        call.resolve(playbackController.notImplementedResponse("pause"))
+        call.resolve(playbackController.pause())
     }
 
     @objc func seek(_ call: CAPPluginCall) {
         let seconds = call.getDouble("seconds") ?? 0
-        var response = playbackController.notImplementedResponse("seek")
-        response["seconds"] = seconds
-        call.resolve(response)
+        call.resolve(playbackController.seek(seconds: seconds))
+    }
+
+    @objc func stop(_ call: CAPPluginCall) {
+        call.resolve(playbackController.stop())
+    }
+
+    @objc func setQueue(_ call: CAPPluginCall) {
+        let trackIds = call.getArray("trackIds", String.self) ?? []
+        let startIndex = call.getInt("startIndex") ?? 0
+        call.resolve(playbackController.setQueue(trackIds: trackIds, startIndex: startIndex))
+    }
+
+    @objc func next(_ call: CAPPluginCall) {
+        call.resolve(playbackController.next())
+    }
+
+    @objc func previous(_ call: CAPPluginCall) {
+        call.resolve(playbackController.previous())
     }
 
     @objc func setEpicenterEnabled(_ call: CAPPluginCall) {

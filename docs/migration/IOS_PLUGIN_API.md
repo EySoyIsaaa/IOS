@@ -1,34 +1,22 @@
-# EpicenterDSP iOS Plugin API — checkpoint v5
+# EpicenterDSP iOS Plugin API — checkpoint v7
 
 Fecha: 2026-05-16
 
 ## 1. Estado de esta etapa
 
-Esta etapa crea la base iOS y un plugin Capacitor mínimo para poder abrir el proyecto en Xcode y reservar el contrato nativo que usará la UI React. No implementa todavía:
+Esta etapa mantiene la biblioteca/importación manual iOS del checkpoint anterior e implementa playback nativo básico con `AVFoundation`, `AVAudioSession`, `AVAudioEngine` y `AVAudioPlayerNode`.
 
-- Reproductor nativo completo.
-- Importación real con `UIDocumentPickerViewController`.
-- Base de datos SQLite/Core Data.
-- DSP Epicenter nativo.
+Sigue sin implementar:
+
+- Epicenter DSP nativo.
 - EQ nativo real.
 - Reverb/Concert Hall real.
+- Auto scanner iOS.
+- Ruta HTMLAudioElement/WebAudio/AudioWorklet para iOS.
+- Rediseño de UI.
+- Cambios Android.
 
-Los métodos actuales son stubs controlados que devuelven `status: "not_implemented"` y datos seguros para que una llamada temprana desde el frontend no provoque crash nativo.
-
-## 2. Configuración Capacitor confirmada
-
-La configuración principal sigue en `capacitor.config.ts`:
-
-```txt
-appId: com.epicenter.hifi
-appName: EpicenterDSP Player
-webDir: dist/public
-ios.scheme: EpicenterDSP
-```
-
-Se agregó `@capacitor/ios` a `package.json` como dependencia directa de Capacitor 6 para que `npx cap add ios`/`npx cap sync ios` puedan resolverse cuando el entorno permita instalar dependencias. La plataforma iOS creada manualmente en esta etapa conserva estos valores en `ios/App/App/capacitor.config.json` para que Xcode tenga una base consistente mientras `npx cap sync ios` no puede ejecutarse en este entorno por falta de dependencias instaladas.
-
-## 3. Plugin nativo creado
+## 2. Plugin nativo
 
 Archivo principal:
 
@@ -42,7 +30,7 @@ Clase nativa:
 EpicenterNativePlugin
 ```
 
-Nombre JavaScript reservado:
+Nombre JavaScript:
 
 ```txt
 EpicenterNative
@@ -54,134 +42,224 @@ Identificador nativo:
 EpicenterNativePlugin
 ```
 
-Registro preliminar:
+El plugin registra eventos de playback con `notifyListeners` para que el frontend pueda escuchar cambios de estado, track actual, progreso y errores.
+
+## 3. Modelos y persistencia nativa
+
+Archivos principales:
 
 ```txt
-ios/App/App/ViewController.swift
+ios/App/App/NativeAudio/NativeAudioModels.swift
+ios/App/App/NativeAudio/NativeLibraryDatabase.swift
+ios/App/App/NativeAudio/NativeTrackRepository.swift
+ios/App/App/NativeAudio/NativeTrackImporter.swift
 ```
 
-El registro usa `bridge?.registerPluginInstance(EpicenterNativePlugin())` dentro de `capacitorDidLoad()` para mantener el plugin centralizado.
+La DB local usa SQLite directo mediante `SQLite3`, sin dependencias externas. Archivo físico:
 
-## 4. Métodos stub disponibles
+```txt
+Application Support/NativeLibrary/tracks.sqlite
+```
 
-### 4.1 Library
+La estrategia de importación copia archivos seleccionados al sandbox:
 
-#### `importTracks()`
+```txt
+Documents/AudioLibrary
+```
 
-Estado actual: stub.
+Ver detalles en:
 
-Respuesta actual:
+```txt
+docs/migration/IOS_IMPORT_STRATEGY.md
+```
 
-```json
-{
-  "status": "not_implemented",
-  "tracks": []
+## 4. Playback nativo
+
+Archivos principales:
+
+```txt
+ios/App/App/NativeAudio/NativeAudioSessionManager.swift
+ios/App/App/NativeAudio/NativeAudioEngine.swift
+ios/App/App/NativeAudio/NativePlaybackController.swift
+ios/App/App/NativeAudio/NativeQueueManager.swift
+```
+
+Ver detalles en:
+
+```txt
+docs/migration/IOS_NATIVE_PLAYBACK.md
+```
+
+La reproducción carga `NativeTrack.localFilePath`, abre el archivo con `AVAudioFile(forReading:)`, programa el audio con `AVAudioPlayerNode.scheduleSegment`, activa `AVAudioSession` como `.playback` y reproduce desde `AVAudioEngine`.
+
+## 5. Modelo `IOSNativeTrack`
+
+Respuesta JS/TS expuesta por el plugin:
+
+```ts
+interface IOSNativeTrack {
+  id: string;
+  stableId: string;
+  title: string;
+  artist?: string | null;
+  album?: string | null;
+  durationMs: number;
+  fileName: string;
+  fileExtension: string;
+  sourceUri: string;
+  bookmarkData?: string | null;
+  localFilePath?: string | null;
+  sourceType: 'manual-ios';
+  addedAt: string;
+  updatedAt: string;
+  sizeBytes: number;
+  sampleRate?: number | null;
+  bitDepth?: number | null;
+  bitrate?: number | null;
+  channelCount?: number | null;
+  albumArtUri?: string | null;
+  isAvailable: boolean;
+  playCount: number;
+  lastPlayedAt?: string | null;
 }
 ```
 
-Implementación futura:
+## 6. Métodos reales de biblioteca
 
-- Presentar `UIDocumentPickerViewController`.
-- Filtrar por `UTType.audio`.
-- Leer metadatos con `AVAsset`.
-- Copiar al sandbox o guardar bookmark según `IOS_IMPORT_STRATEGY.md`.
-- Persistir/upsert en DB iOS local.
-- Emitir `libraryChanged`.
+### `importTracks()`
 
-#### `getLibraryPage({ offset, limit, search, sort })`
+Estado: real.
 
-Estado actual: stub.
+Presenta `UIDocumentPickerViewController` con `UTType.audio` y `allowsMultipleSelection = true`. Copia al sandbox, lee metadatos con `AVAsset`, persiste en SQLite y devuelve tracks importados.
 
-Respuesta actual:
+### `getLibraryPage({ offset, limit, search, sort })`
+
+Estado: real.
+
+- `offset` mínimo: `0`.
+- `limit` mínimo: `1`.
+- `limit` máximo: `500`.
+- `search` busca en `title`, `artist`, `album` y `fileName`.
+- `sort`: `title`, `artist`, `album`, `duration`, `addedAt`, `updatedAt`.
+
+### `getTrack({ id })`
+
+Estado: real.
+
+Busca por `id` o `stableId`.
+
+### `deleteTrack({ id })`
+
+Estado: real.
+
+Elimina la fila SQLite y luego intenta eliminar archivo sandboxed y artwork asociado.
+
+## 7. Métodos reales de playback
+
+### `setQueue({ trackIds, startIndex })`
+
+Estado: real.
+
+Configura una cola básica de ids. Los ids pueden ser `id` o `stableId` porque el repositorio resuelve ambos.
+
+Respuesta:
 
 ```json
 {
-  "status": "not_implemented",
-  "tracks": [],
-  "offset": 0,
-  "limit": 50,
-  "total": 0
+  "status": "ok",
+  "queue": {
+    "trackIds": [],
+    "currentIndex": 0,
+    "currentTrackId": null
+  }
 }
 ```
 
-Implementación futura:
+### `play({ trackId? })`
 
-- Consultar DB local nativa.
-- Soportar búsqueda por `title`, `artist`, `album` si aplica.
-- Respetar paginación y orden.
+Estado: real.
 
-### 4.2 Playback
+- Si recibe `trackId`, lo selecciona como track actual.
+- Si no recibe `trackId`, usa el track actual de la cola.
+- Busca el track en SQLite.
+- Carga `localFilePath` en `AVAudioEngine`.
+- Activa `AVAudioSession` con category `.playback`.
+- Reproduce con `AVAudioPlayerNode`.
 
-#### `getPlaybackState()`
+Si el track no existe o el archivo no está disponible, devuelve `status: "error"` y emite `playbackError`.
 
-Estado actual: stub.
+### `pause()`
 
-Respuesta actual:
+Estado: real.
+
+Pausa `AVAudioPlayerNode` y conserva el frame actual para poder reanudar.
+
+### `seek({ seconds })`
+
+Estado: real.
+
+Convierte segundos a frame usando `AVAudioFile.processingFormat.sampleRate`, detiene el nodo, reprograma el segmento desde el frame solicitado y reanuda si estaba reproduciendo.
+
+### `stop()`
+
+Estado: real.
+
+Detiene el player node, pausa el engine, desactiva la sesión si es posible y conserva la cola.
+
+### `next()`
+
+Estado: real.
+
+Avanza en la cola y reproduce el siguiente track si existe.
+
+### `previous()`
+
+Estado: real.
+
+Retrocede en la cola si existe un track anterior. Si ya está al inicio, intenta volver al segundo `0` del track actual.
+
+### `getPlaybackState()`
+
+Estado: real.
+
+Respuesta:
 
 ```json
 {
-  "status": "not_implemented",
+  "status": "ok",
   "isPlaying": false,
   "currentTime": 0,
   "duration": 0,
-  "currentTrackId": null
+  "durationMs": 0,
+  "currentTrackId": null,
+  "stableId": null,
+  "currentTrack": null,
+  "queue": {
+    "trackIds": [],
+    "currentIndex": 0,
+    "currentTrackId": null
+  }
 }
 ```
 
-#### `play({ trackId? })`
+`currentTime` se calcula desde `AVAudioPlayerNode.lastRenderTime`, `playerTime(forNodeTime:)`, `scheduledStartFrame` y el sample rate del archivo.
 
-Estado actual: stub.
+## 8. Eventos implementados
 
-Respuesta actual:
+- `playbackStateChanged`
+- `currentTrackChanged`
+- `progressChanged`
+- `playbackError`
 
-```json
-{
-  "status": "not_implemented",
-  "method": "play"
-}
-```
+Evento adicional disponible:
 
-#### `pause()`
+- `audioRouteChanged`
 
-Estado actual: stub.
+## 9. Métodos DSP/EQ/FX que siguen stub
 
-Respuesta actual:
+### `setEpicenterEnabled({ enabled })`
 
-```json
-{
-  "status": "not_implemented",
-  "method": "pause"
-}
-```
-
-#### `seek({ seconds })`
-
-Estado actual: stub.
-
-Respuesta actual:
-
-```json
-{
-  "status": "not_implemented",
-  "method": "seek",
-  "seconds": 0
-}
-```
-
-Implementación futura de playback:
-
-- `AVAudioSession` con categoría `playback`.
-- `AVAudioEngine` + `AVAudioPlayerNode`.
-- Cola nativa.
-- Eventos `playbackStateChanged`, `progressChanged`, `currentTrackChanged`, `queueChanged`, `error`.
-
-### 4.3 DSP / EQ / FX
-
-#### `setEpicenterEnabled({ enabled })`
-
-Estado actual: stub sin DSP real.
-
-Respuesta actual:
+Estado: stub sin DSP real.
 
 ```json
 {
@@ -191,11 +269,9 @@ Respuesta actual:
 }
 ```
 
-#### `setEqBands({ gains })`
+### `setEqBands({ gains })`
 
-Estado actual: stub. Normaliza la respuesta a 31 valores para reservar el contrato de EQ.
-
-Respuesta actual:
+Estado: stub. Normaliza la respuesta a 31 valores para reservar contrato, pero no altera audio todavía.
 
 ```json
 {
@@ -204,13 +280,9 @@ Respuesta actual:
 }
 ```
 
-Nota: internamente se recorta o rellena a 31 bandas.
+### `setReverbEnabled({ enabled })`
 
-#### `setReverbEnabled({ enabled })`
-
-Estado actual: stub sin `AVAudioUnitReverb` todavía.
-
-Respuesta actual:
+Estado: stub sin `AVAudioUnitReverb` todavía.
 
 ```json
 {
@@ -219,50 +291,25 @@ Respuesta actual:
 }
 ```
 
-## 5. Eventos reservados para fases siguientes
+## 10. Wrapper JS/TS
 
-Todavía no se emiten eventos reales desde los stubs. El contrato reservado es:
-
-- `playbackStateChanged`
-- `progressChanged`
-- `currentTrackChanged`
-- `queueChanged`
-- `libraryChanged`
-- `dspStateChanged`
-- `error`
-- `audioRouteChanged`
-- `interruptionBegan`
-- `interruptionEnded`
-
-## 6. Estructura nativa relacionada
+Archivo:
 
 ```txt
-ios/App/App/NativeAudio/NativeAudioModels.swift
-ios/App/App/NativeAudio/NativeAudioEngine.swift
-ios/App/App/NativeAudio/NativePlaybackController.swift
-ios/App/App/NativeAudio/NativeQueueManager.swift
-ios/App/App/NativeAudio/NativeAudioSessionManager.swift
-ios/App/App/NativeAudio/NowPlayingManager.swift
-ios/App/App/NativeAudio/RemoteCommandManager.swift
-ios/App/App/NativeAudio/NativeLibraryDatabase.swift
-ios/App/App/NativeAudio/NativeTrackImporter.swift
-ios/App/App/NativeAudio/NativeTrackRepository.swift
-ios/App/App/DSP/EQ31BandProcessor.swift
-ios/App/App/DSP/ReverbProcessor.swift
-ios/App/App/DSP/AudioLimiter.swift
-ios/App/App/DSP/EpicenterDSPCore.hpp
-ios/App/App/DSP/EpicenterDSPCore.cpp
-ios/App/App/DSP/EpicenterDSPBridge.h
-ios/App/App/DSP/EpicenterDSPBridge.mm
-ios/App/App/Plugins/EpicenterNativePlugin.swift
+client/src/native/iosNativeAudio.ts
 ```
 
-## 7. Reglas cumplidas en esta etapa
+Expone tipos TS para biblioteca, cola, playback state y métodos Capacitor registrados como:
 
-- No se cambió la UI.
+```ts
+export const EpicenterNative = registerPlugin<EpicenterNativePlugin>('EpicenterNative');
+```
+
+## 11. Reglas cumplidas en esta etapa
+
+- No se rediseñó UI.
 - No se tocó Android.
-- No se implementó auto scanner iOS.
-- No se implementó ruta de audio WebAudio para iOS.
-- No se implementó DSP nativo completo.
-- No se sustituyó Epicenter por bass boost genérico.
-- Los métodos stub devuelven respuestas controladas y no deberían crashear si son llamados.
+- No se implementó auto scanner.
+- No se usó HTMLAudioElement/WebAudio/AudioWorklet para iOS.
+- No se implementó Epicenter DSP, EQ ni Concert Hall.
+- Playback básico y DSP quedan separados.
