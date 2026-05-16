@@ -19,6 +19,7 @@ public class EpicenterNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "next", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "previous", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setEpicenterEnabled", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setEpicenterParams", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setEqBands", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setReverbEnabled", returnType: CAPPluginReturnPromise),
     ]
@@ -125,11 +126,17 @@ public class EpicenterNativePlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func setEpicenterEnabled(_ call: CAPPluginCall) {
         let enabled = call.getBool("enabled") ?? false
-        call.resolve([
-            "status": NativeAudioStubStatus.notImplemented.rawValue,
-            "method": "setEpicenterEnabled",
-            "enabled": enabled,
-        ])
+        call.resolve(playbackController.setEpicenterEnabled(enabled))
+    }
+
+    @objc func setEpicenterParams(_ call: CAPPluginCall) {
+        call.resolve(playbackController.setEpicenterParams(
+            intensity: call.getDouble("intensity"),
+            sweepFreq: call.getDouble("sweepFreq") ?? call.getDouble("sweep"),
+            width: call.getDouble("width"),
+            balance: call.getDouble("balance"),
+            volume: call.getDouble("volume") ?? call.getDouble("output")
+        ))
     }
 
     @objc func setEqBands(_ call: CAPPluginCall) {

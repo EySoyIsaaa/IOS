@@ -77,6 +77,16 @@ export interface IOSNativePlaybackState {
   queue?: IOSNativePlaybackQueue;
   code?: string;
   message?: string;
+  epicenter?: IOSNativeEpicenterState;
+}
+
+export interface IOSNativeEpicenterState {
+  enabled: boolean;
+  intensity: number;
+  sweepFreq: number;
+  width: number;
+  balance: number;
+  volume: number;
 }
 
 export interface IOSNativeSetQueueResult {
@@ -118,6 +128,7 @@ export interface EpicenterNativePlugin {
   next(): Promise<IOSNativePlaybackState>;
   previous(): Promise<IOSNativePlaybackState>;
   setEpicenterEnabled(params: { enabled: boolean }): Promise<Record<string, unknown>>;
+  setEpicenterParams(params: Partial<Omit<IOSNativeEpicenterState, 'enabled'>> & { output?: number; sweep?: number }): Promise<Record<string, unknown>>;
   setEqBands(params: { gains: number[] }): Promise<Record<string, unknown>>;
   setReverbEnabled(params: { enabled: boolean }): Promise<Record<string, unknown>>;
   addListener(
