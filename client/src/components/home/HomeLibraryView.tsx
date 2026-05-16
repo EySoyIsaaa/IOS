@@ -14,10 +14,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SwipeableTrackItem } from "@/components/SwipeableTrackItem";
-import { AndroidMusicImporter } from "@/components/AndroidMusicImporter";
-import { MusicScanner } from "@/components/MusicScanner";
 import { TrackArtwork } from "@/components/TrackArtwork";
-import type { ImportResult, Track } from "@/hooks/useAudioQueue";
+import type { Track } from "@/hooks/useAudioQueue";
 import type { Playlist } from "@/hooks/usePlaylists";
 import type {
   HomeLibraryView as HomeLibraryViewType,
@@ -27,7 +25,6 @@ import type {
   HomeTrackActions,
   TranslateFn,
 } from "@/components/home/types";
-import type { AndroidMusicFile } from "@/hooks/useAndroidMusicLibrary";
 
 interface HomeLibraryViewProps
   extends HomeTrackActions,
@@ -54,9 +51,6 @@ interface HomeLibraryViewProps
   ) => void;
   onCreatePlaylist: () => void;
   onOpenFilePicker: () => void;
-  onImportMediaStoreTracks: (
-    tracks: AndroidMusicFile[],
-  ) => Promise<ImportResult>;
   onOpenAddToPlaylist: (track: Track) => void;
   onPersistEphemeralTrack: (track: Track) => void;
   onOpenAddSongsToPlaylist: () => void;
@@ -87,7 +81,6 @@ export function HomeLibraryView({
   setPlaylistMenu,
   onCreatePlaylist,
   onOpenFilePicker,
-  onImportMediaStoreTracks,
   onPlayNow,
   onAddToQueue,
   onPlayNext,
@@ -150,7 +143,6 @@ export function HomeLibraryView({
           )}
           {libraryView === "main" && (
             <>
-              <AndroidMusicImporter onImportTracks={onImportMediaStoreTracks} />
               <button
                 onClick={onOpenFilePicker}
                 className="hardware-button rounded-full p-2 text-white"
@@ -301,13 +293,14 @@ export function HomeLibraryView({
                   strokeWidth={1}
                 />
                 <p className="text-zinc-500 mb-6">{t("library.noMusic")}</p>
-                <div className="max-w-md mx-auto">
-                  <MusicScanner
-                    onScanComplete={onImportMediaStoreTracks}
-                    onManualImport={onOpenFilePicker}
-                    isScanning={importIsImporting}
-                  />
-                </div>
+                <Button
+                  onClick={onOpenFilePicker}
+                  disabled={importIsImporting}
+                  variant="outline"
+                  className="border-zinc-800"
+                >
+                  {importIsImporting ? t("library.importing") : t("library.addMusic")}
+                </Button>
               </div>
             ) : null}
           </div>

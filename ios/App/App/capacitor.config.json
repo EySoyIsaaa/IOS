@@ -1,11 +1,19 @@
 {
-  "appId": "com.epicenter.hifi",
-  "appName": "EpicenterDSP Player",
-  "webDir": "dist/public",
-  "server": {
-    "androidScheme": "https"
-  },
-  "ios": {
-    "scheme": "EpicenterDSP"
-  }
+	"appId": "com.epicenter.hifi",
+	"appName": "EpicenterDSP Player",
+	"webDir": "dist/public",
+	"ios": {
+		"scheme": "EpicenterDSP"
+	},
+	"plugins": {
+		"SplashScreen": {
+			"launchShowDuration": 1500,
+			"backgroundColor": "#000000",
+			"showSpinner": false,
+			"launchAutoHide": true
+		}
+	},
+	"packageClassList": [
+		"EpicenterNativePlugin"
+	]
 }
