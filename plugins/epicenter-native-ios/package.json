@@ -1,0 +1,12 @@
+{
+  "name": "epicenter-native-ios",
+  "version": "1.0.0",
+  "description": "Epicenter native iOS Capacitor plugin for the iOS-only app branch",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  }
+}
