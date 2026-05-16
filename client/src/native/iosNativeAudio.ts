@@ -1,4 +1,4 @@
-import { registerPlugin } from '@capacitor/core';
+import { registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 
 export type IOSNativeAudioStatus = 'ok' | 'not_found' | 'not_implemented' | 'error';
 
@@ -84,6 +84,26 @@ export interface IOSNativeSetQueueResult {
   queue: IOSNativePlaybackQueue;
 }
 
+
+export interface IOSNativePlaybackErrorEvent {
+  status: 'error';
+  code: string;
+  message: string;
+  trackId?: string;
+}
+
+export interface IOSNativeCurrentTrackChangedEvent {
+  status: IOSNativeAudioStatus;
+  track: IOSNativeTrack;
+}
+
+export interface IOSNativeAudioRouteChangedEvent {
+  reason: string;
+}
+
+export type IOSNativeProgressChangedEvent = IOSNativePlaybackState;
+export type IOSNativePlaybackStateChangedEvent = IOSNativePlaybackState;
+
 export interface EpicenterNativePlugin {
   importTracks(): Promise<IOSNativeImportTracksResult>;
   getLibraryPage(params?: IOSNativeLibraryPageParams): Promise<IOSNativeLibraryPageResult>;
@@ -100,6 +120,27 @@ export interface EpicenterNativePlugin {
   setEpicenterEnabled(params: { enabled: boolean }): Promise<Record<string, unknown>>;
   setEqBands(params: { gains: number[] }): Promise<Record<string, unknown>>;
   setReverbEnabled(params: { enabled: boolean }): Promise<Record<string, unknown>>;
+  addListener(
+    eventName: 'playbackStateChanged',
+    listenerFunc: (event: IOSNativePlaybackStateChangedEvent) => void,
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'currentTrackChanged',
+    listenerFunc: (event: IOSNativeCurrentTrackChangedEvent) => void,
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'progressChanged',
+    listenerFunc: (event: IOSNativeProgressChangedEvent) => void,
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'playbackError',
+    listenerFunc: (event: IOSNativePlaybackErrorEvent) => void,
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'audioRouteChanged',
+    listenerFunc: (event: IOSNativeAudioRouteChangedEvent) => void,
+  ): Promise<PluginListenerHandle>;
+  removeAllListeners(): Promise<void>;
 }
 
 export const EpicenterNative = registerPlugin<EpicenterNativePlugin>('EpicenterNative');

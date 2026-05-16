@@ -186,7 +186,7 @@ Estado: real.
 - Activa `AVAudioSession` con category `.playback`.
 - Reproduce con `AVAudioPlayerNode`.
 
-Si el track no existe o el archivo no está disponible, devuelve `status: "error"` y emite `playbackError`.
+Si el track no existe, el archivo no está disponible o no quedan frames reproducibles desde la posición solicitada, devuelve `status: "error"` y emite `playbackError`.
 
 ### `pause()`
 
@@ -299,7 +299,7 @@ Archivo:
 client/src/native/iosNativeAudio.ts
 ```
 
-Expone tipos TS para biblioteca, cola, playback state y métodos Capacitor registrados como:
+Expone tipos TS para biblioteca, cola, playback state, métodos Capacitor y listeners tipados para `playbackStateChanged`, `currentTrackChanged`, `progressChanged`, `playbackError` y `audioRouteChanged`, registrados como:
 
 ```ts
 export const EpicenterNative = registerPlugin<EpicenterNativePlugin>('EpicenterNative');

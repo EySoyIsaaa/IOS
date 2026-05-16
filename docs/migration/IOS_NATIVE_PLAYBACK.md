@@ -57,7 +57,7 @@ Responsabilidades:
 - Resuelve tracks desde SQLite usando `NativeTrackRepository.findTrack(id:)`.
 - Carga `localFilePath` en el engine.
 - Emite eventos Capacitor a través de `EpicenterNativePlugin`.
-- Devuelve errores controlados si el track no existe o el archivo no está disponible.
+- Devuelve errores controlados si el track no existe, el archivo no está disponible o no quedan frames reproducibles desde la posición solicitada.
 
 ## Métodos reales de playback
 
@@ -77,7 +77,7 @@ Responsabilidades:
 - `progressChanged`
 - `playbackError`
 
-También se emite `audioRouteChanged` cuando iOS notifica cambios de ruta.
+También se emite `audioRouteChanged` cuando iOS notifica cambios de ruta. El wrapper TypeScript expone overloads de `addListener` para estos eventos y `removeAllListeners()` para limpieza.
 
 ## Cómo se carga un archivo
 

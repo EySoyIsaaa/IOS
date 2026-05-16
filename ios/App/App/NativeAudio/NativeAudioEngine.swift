@@ -6,6 +6,7 @@ final class NativeAudioEngine {
         case missingLocalFilePath
         case fileUnavailable(String)
         case noLoadedTrack
+        case noPlayableFrames
         case invalidAudioFile(String)
 
         var errorDescription: String? {
@@ -16,6 +17,8 @@ final class NativeAudioEngine {
                 return "Audio file is not available at \(path)"
             case .noLoadedTrack:
                 return "No track is loaded"
+            case .noPlayableFrames:
+                return "No playable audio frames remain for the loaded track"
             case .invalidAudioFile(let message):
                 return message
             }
@@ -66,7 +69,7 @@ final class NativeAudioEngine {
             isScheduled = false
             pausedFrame = framePosition(for: seconds, in: file)
             scheduledStartFrame = pausedFrame
-            try scheduleSegment(from: pausedFrame)
+            _ = try scheduleSegment(from: pausedFrame)
         } catch let error as EngineError {
             throw error
         } catch {
@@ -79,7 +82,10 @@ final class NativeAudioEngine {
             throw EngineError.noLoadedTrack
         }
         if !isScheduled {
-            try scheduleSegment(from: pausedFrame)
+            _ = try scheduleSegment(from: pausedFrame)
+        }
+        guard isScheduled else {
+            throw EngineError.noPlayableFrames
         }
         if !engine.isRunning {
             try engine.start()
@@ -120,8 +126,8 @@ final class NativeAudioEngine {
         isPlaying = false
         isScheduled = false
         pausedFrame = targetFrame
-        try scheduleSegment(from: targetFrame)
-        if wasPlaying {
+        _ = try scheduleSegment(from: targetFrame)
+        if wasPlaying, isScheduled {
             if !engine.isRunning {
                 try engine.start()
             }
@@ -147,7 +153,7 @@ final class NativeAudioEngine {
         return state
     }
 
-    private func scheduleSegment(from frame: AVAudioFramePosition) throws {
+    private func scheduleSegment(from frame: AVAudioFramePosition) throws -> Bool {
         guard let file = audioFile else {
             throw EngineError.noLoadedTrack
         }
@@ -161,7 +167,7 @@ final class NativeAudioEngine {
 
         guard remainingFrames > 0 else {
             isScheduled = false
-            return
+            return false
         }
 
         let frameCount = AVAudioFrameCount(min(remainingFrames, AVAudioFramePosition(UInt32.max)))
@@ -176,6 +182,7 @@ final class NativeAudioEngine {
                 self?.handlePlaybackCompleted(token: token)
             }
         }
+        return true
     }
 
     private func handlePlaybackCompleted(token: Int) {
