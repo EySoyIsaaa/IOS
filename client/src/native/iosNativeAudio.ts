@@ -1,6 +1,6 @@
 import { registerPlugin } from '@capacitor/core';
 
-export type IOSNativeAudioStatus = 'ok' | 'not_found' | 'not_implemented';
+export type IOSNativeAudioStatus = 'ok' | 'not_found' | 'not_implemented' | 'error';
 
 export interface IOSNativeTrack {
   id: string;
@@ -59,12 +59,29 @@ export interface IOSNativeDeleteTrackResult {
   track?: IOSNativeTrack;
 }
 
+export interface IOSNativePlaybackQueue {
+  trackIds: string[];
+  currentIndex: number;
+  currentTrackId?: string | null;
+}
+
 export interface IOSNativePlaybackState {
   status: IOSNativeAudioStatus;
   isPlaying: boolean;
   currentTime: number;
   duration: number;
+  durationMs?: number;
   currentTrackId?: string | null;
+  stableId?: string | null;
+  currentTrack?: IOSNativeTrack | null;
+  queue?: IOSNativePlaybackQueue;
+  code?: string;
+  message?: string;
+}
+
+export interface IOSNativeSetQueueResult {
+  status: IOSNativeAudioStatus;
+  queue: IOSNativePlaybackQueue;
 }
 
 export interface EpicenterNativePlugin {
@@ -73,9 +90,13 @@ export interface EpicenterNativePlugin {
   getTrack(params: { id: string }): Promise<IOSNativeTrackResult>;
   deleteTrack(params: { id: string }): Promise<IOSNativeDeleteTrackResult>;
   getPlaybackState(): Promise<IOSNativePlaybackState>;
-  play(params?: { trackId?: string }): Promise<Record<string, unknown>>;
-  pause(): Promise<Record<string, unknown>>;
-  seek(params: { seconds: number }): Promise<Record<string, unknown>>;
+  setQueue(params: { trackIds: string[]; startIndex?: number }): Promise<IOSNativeSetQueueResult>;
+  play(params?: { trackId?: string }): Promise<IOSNativePlaybackState>;
+  pause(): Promise<IOSNativePlaybackState>;
+  seek(params: { seconds: number }): Promise<IOSNativePlaybackState>;
+  stop(): Promise<IOSNativePlaybackState>;
+  next(): Promise<IOSNativePlaybackState>;
+  previous(): Promise<IOSNativePlaybackState>;
   setEpicenterEnabled(params: { enabled: boolean }): Promise<Record<string, unknown>>;
   setEqBands(params: { gains: number[] }): Promise<Record<string, unknown>>;
   setReverbEnabled(params: { enabled: boolean }): Promise<Record<string, unknown>>;

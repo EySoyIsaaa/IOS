@@ -29,8 +29,12 @@ final class NativeTrackRepository {
         database.getLibraryPage(offset: offset, limit: limit, search: search, sort: sort).dictionary
     }
 
+    func findTrack(id: String) -> NativeTrack? {
+        database.getTrack(id: id)
+    }
+
     func getTrack(id: String) -> [String: Any] {
-        guard let track = database.getTrack(id: id) else {
+        guard let track = findTrack(id: id) else {
             return [
                 "status": "not_found",
                 "track": NSNull(),

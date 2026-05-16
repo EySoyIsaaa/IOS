@@ -14,6 +14,10 @@ public class EpicenterNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "play", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pause", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "seek", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setQueue", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "next", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "previous", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setEpicenterEnabled", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setEqBands", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setReverbEnabled", returnType: CAPPluginReturnPromise),
@@ -21,9 +25,15 @@ public class EpicenterNativePlugin: CAPPlugin, CAPBridgedPlugin {
 
     private let repository = NativeTrackRepository()
     private lazy var importer = NativeTrackImporter(repository: repository)
-    private let playbackController = NativePlaybackController()
+    private lazy var playbackController = NativePlaybackController(repository: repository)
     private let eqProcessor = EQ31BandProcessor()
     private let reverbProcessor = ReverbProcessor()
+
+    public override func load() {
+        playbackController.setEventEmitter { [weak self] eventName, data in
+            self?.notifyListeners(eventName, data: data)
+        }
+    }
 
     @objc func importTracks(_ call: CAPPluginCall) {
         guard let presenter = bridge?.viewController else {
@@ -79,18 +89,34 @@ public class EpicenterNativePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func play(_ call: CAPPluginCall) {
-        call.resolve(playbackController.notImplementedResponse("play"))
+        call.resolve(playbackController.play(trackId: call.getString("trackId")))
     }
 
     @objc func pause(_ call: CAPPluginCall) {
-        call.resolve(playbackController.notImplementedResponse("pause"))
+        call.resolve(playbackController.pause())
     }
 
     @objc func seek(_ call: CAPPluginCall) {
         let seconds = call.getDouble("seconds") ?? 0
-        var response = playbackController.notImplementedResponse("seek")
-        response["seconds"] = seconds
-        call.resolve(response)
+        call.resolve(playbackController.seek(seconds: seconds))
+    }
+
+    @objc func stop(_ call: CAPPluginCall) {
+        call.resolve(playbackController.stop())
+    }
+
+    @objc func setQueue(_ call: CAPPluginCall) {
+        let trackIds = call.getArray("trackIds", String.self) ?? []
+        let startIndex = call.getInt("startIndex") ?? 0
+        call.resolve(playbackController.setQueue(trackIds: trackIds, startIndex: startIndex))
+    }
+
+    @objc func next(_ call: CAPPluginCall) {
+        call.resolve(playbackController.next())
+    }
+
+    @objc func previous(_ call: CAPPluginCall) {
+        call.resolve(playbackController.previous())
     }
 
     @objc func setEpicenterEnabled(_ call: CAPPluginCall) {
