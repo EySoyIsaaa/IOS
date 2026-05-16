@@ -7,6 +7,9 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: 'https',
   },
+  ios: {
+    scheme: 'EpicenterDSP',
+  },
   android: {
     backgroundColor: '#000000',
     allowMixedContent: true,

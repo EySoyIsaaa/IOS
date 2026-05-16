@@ -19,6 +19,7 @@
     "@capacitor/android": "6",
     "@capacitor/cli": "6",
     "@capacitor/core": "6",
+    "@capacitor/ios": "6",
     "@capgo/capacitor-media-session": "^8.0.5",
     "@hookform/resolvers": "^5.2.2",
     "@odion-cloud/capacitor-mediastore": "^1.0.21",
