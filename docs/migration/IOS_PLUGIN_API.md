@@ -1,10 +1,10 @@
-# EpicenterDSP iOS Plugin API — checkpoint v7
+# EpicenterDSP iOS Plugin API — checkpoint v8
 
 Fecha: 2026-05-16
 
 ## 1. Estado de esta etapa
 
-Esta etapa mantiene la biblioteca/importación manual iOS del checkpoint anterior e implementa playback nativo básico con `AVFoundation`, `AVAudioSession`, `AVAudioEngine` y `AVAudioPlayerNode`.
+Esta etapa mantiene la biblioteca/importación manual iOS y el playback nativo básico, y agrega background playback real con `MediaPlayer`, `MPNowPlayingInfoCenter` y `MPRemoteCommandCenter`.
 
 Sigue sin implementar:
 
@@ -90,7 +90,24 @@ Ver detalles en:
 docs/migration/IOS_NATIVE_PLAYBACK.md
 ```
 
-La reproducción carga `NativeTrack.localFilePath`, abre el archivo con `AVAudioFile(forReading:)`, programa el audio con `AVAudioPlayerNode.scheduleSegment`, activa `AVAudioSession` como `.playback` y reproduce desde `AVAudioEngine`.
+La reproducción carga `NativeTrack.localFilePath`, abre el archivo con `AVAudioFile(forReading:)`, programa el audio con `AVAudioPlayerNode.scheduleSegment`, activa `AVAudioSession` como `.playback` y reproduce desde `AVAudioEngine`. `NowPlayingManager` publica metadata en pantalla bloqueada y `RemoteCommandManager` conecta comandos remotos hacia el controlador.
+
+## 4.1 Background playback / MediaPlayer
+
+Archivo de detalle:
+
+```txt
+docs/migration/IOS_BACKGROUND_PLAYBACK.md
+```
+
+Componentes:
+
+```txt
+ios/App/App/NativeAudio/NowPlayingManager.swift
+ios/App/App/NativeAudio/RemoteCommandManager.swift
+```
+
+`NowPlayingManager` publica título, artista, álbum, duración, elapsed time, `playbackRate` y artwork local si existe. `RemoteCommandManager` soporta `playCommand`, `pauseCommand`, `togglePlayPauseCommand`, `nextTrackCommand`, `previousTrackCommand` y `changePlaybackPositionCommand`, registrando handlers una sola vez.
 
 ## 5. Modelo `IOSNativeTrack`
 
@@ -254,6 +271,8 @@ Respuesta:
 Evento adicional disponible:
 
 - `audioRouteChanged`
+
+Los eventos existentes siguen siendo suficientes para reflejar comandos remotos; no se agregan eventos TS obligatorios para Now Playing en esta fase.
 
 ## 9. Métodos DSP/EQ/FX que siguen stub
 

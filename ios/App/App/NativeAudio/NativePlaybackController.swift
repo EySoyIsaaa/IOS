@@ -4,9 +4,12 @@ final class NativePlaybackController {
     private let engine = NativeAudioEngine()
     private let sessionManager = NativeAudioSessionManager()
     private let queueManager = NativeQueueManager()
+    private let nowPlayingManager = NowPlayingManager()
+    private let remoteCommandManager = RemoteCommandManager.shared
     private let repository: NativeTrackRepository
     private let queue = DispatchQueue(label: "com.epicenter.hifi.native-playback-controller")
     private var progressTimer: Timer?
+    private var wasPlayingBeforeInterruption = false
 
     var eventEmitter: ((String, [String: Any]) -> Void)?
 
@@ -19,12 +22,12 @@ final class NativePlaybackController {
             self?.handleInterruptionBegan()
         }
         sessionManager.onInterruptionEnded = { [weak self] in
-            self?.emitPlaybackEvent("playbackStateChanged")
+            self?.handleInterruptionEnded()
         }
         sessionManager.onRouteChanged = { [weak self] reason in
-            self?.emit("audioRouteChanged", ["reason": reason])
-            self?.emitPlaybackEvent("playbackStateChanged")
+            self?.handleRouteChanged(reason: reason)
         }
+        configureRemoteCommands()
     }
 
     func setEventEmitter(_ emitter: @escaping (String, [String: Any]) -> Void) {
@@ -60,6 +63,7 @@ final class NativePlaybackController {
             engine.pause()
             stopProgressTimer()
             let state = engine.playbackState(queue: queueManager.dictionary)
+            updateNowPlayingPlayback(from: state, playbackRate: 0, force: true)
             emit("playbackStateChanged", state)
             return state
         }
@@ -70,6 +74,7 @@ final class NativePlaybackController {
             do {
                 try engine.seek(to: seconds)
                 let state = engine.playbackState(queue: queueManager.dictionary)
+                updateNowPlayingPlayback(from: state, playbackRate: engine.isCurrentlyPlaying ? 1 : 0, force: true)
                 emit("progressChanged", state)
                 emit("playbackStateChanged", state)
                 startProgressTimerIfNeeded()
@@ -83,9 +88,10 @@ final class NativePlaybackController {
     func stop() -> [String: Any] {
         queue.sync {
             engine.stop(clearTrack: false)
-            sessionManager.deactivateIfPossible()
+            sessionManager.deactivateIfPossible(keepActiveForQueue: queueManager.currentTrackId != nil)
             stopProgressTimer()
             let state = engine.playbackState(queue: queueManager.dictionary)
+            nowPlayingManager.updateStopped(elapsedTime: state["currentTime"] as? Double ?? 0)
             emit("playbackStateChanged", state)
             return state
         }
@@ -106,6 +112,7 @@ final class NativePlaybackController {
                 do {
                     try engine.seek(to: 0)
                     let state = engine.playbackState(queue: queueManager.dictionary)
+                    updateNowPlayingPlayback(from: state, playbackRate: engine.isCurrentlyPlaying ? 1 : 0, force: true)
                     emit("progressChanged", state)
                     return state
                 } catch {
@@ -136,10 +143,13 @@ final class NativePlaybackController {
             let shouldLoadTrack = shouldRestartLoadedTrack || engine.currentTrackId != track.id
             if shouldLoadTrack {
                 try engine.load(track: track)
+                let loadedState = engine.playbackState(queue: queueManager.dictionary)
+                updateNowPlayingMetadata(for: track, from: loadedState, playbackRate: 0)
                 emit("currentTrackChanged", ["status": "ok", "track": track.dictionary])
             }
             try engine.play()
             let state = engine.playbackState(queue: queueManager.dictionary)
+            updateNowPlayingPlayback(from: state, playbackRate: 1, force: true)
             emit("playbackStateChanged", state)
             startProgressTimerIfNeeded()
             return state
@@ -158,6 +168,7 @@ final class NativePlaybackController {
             } else {
                 self.stopProgressTimer()
                 let state = self.engine.playbackState(queue: self.queueManager.dictionary)
+                self.nowPlayingManager.updateStopped(elapsedTime: state["currentTime"] as? Double ?? 0)
                 self.emit("playbackStateChanged", state)
                 self.emit("trackEnded", ["status": "ok", "track": track.dictionary])
             }
@@ -167,9 +178,42 @@ final class NativePlaybackController {
     private func handleInterruptionBegan() {
         queue.async { [weak self] in
             guard let self = self else { return }
+            self.wasPlayingBeforeInterruption = self.engine.isCurrentlyPlaying
             self.engine.pause()
             self.stopProgressTimer()
-            self.emitPlaybackEvent("playbackStateChanged")
+            let state = self.engine.playbackState(queue: self.queueManager.dictionary)
+            self.updateNowPlayingPlayback(from: state, playbackRate: 0, force: true)
+            self.emit("playbackStateChanged", state)
+        }
+    }
+
+    private func handleInterruptionEnded() {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            let shouldRemainPaused = self.wasPlayingBeforeInterruption
+            self.wasPlayingBeforeInterruption = false
+            let state = self.engine.playbackState(queue: self.queueManager.dictionary)
+            if shouldRemainPaused {
+                self.updateNowPlayingPlayback(from: state, playbackRate: 0, force: true)
+            }
+            self.emit("playbackStateChanged", state)
+        }
+    }
+
+    private func handleRouteChanged(reason: String) {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            if reason == "oldDeviceUnavailable", self.engine.isCurrentlyPlaying {
+                self.engine.pause()
+                self.stopProgressTimer()
+                let state = self.engine.playbackState(queue: self.queueManager.dictionary)
+                self.updateNowPlayingPlayback(from: state, playbackRate: 0, force: true)
+                self.emit("audioRouteChanged", ["reason": reason])
+                self.emit("playbackStateChanged", state)
+                return
+            }
+            self.emit("audioRouteChanged", ["reason": reason])
+            self.emit("playbackStateChanged", self.engine.playbackState(queue: self.queueManager.dictionary))
         }
     }
 
@@ -178,6 +222,46 @@ final class NativePlaybackController {
             guard let self = self else { return }
             self.emit(eventName, self.engine.playbackState(queue: self.queueManager.dictionary))
         }
+    }
+
+
+    private func configureRemoteCommands() {
+        _ = remoteCommandManager.configure(
+            handlers: RemoteCommandManager.Handlers(
+                play: { [weak self] in self?.isSuccessfulPlaybackResponse(self?.play()) == true },
+                pause: { [weak self] in self?.isSuccessfulPlaybackResponse(self?.pause()) == true },
+                togglePlayPause: { [weak self] in
+                    guard let self = self else { return false }
+                    return self.engine.isCurrentlyPlaying
+                        ? self.isSuccessfulPlaybackResponse(self.pause())
+                        : self.isSuccessfulPlaybackResponse(self.play())
+                },
+                next: { [weak self] in self?.isSuccessfulPlaybackResponse(self?.next()) == true },
+                previous: { [weak self] in self?.isSuccessfulPlaybackResponse(self?.previous()) == true },
+                seek: { [weak self] seconds in self?.isSuccessfulPlaybackResponse(self?.seek(seconds: seconds)) == true }
+            )
+        )
+    }
+
+    private func updateNowPlayingMetadata(for track: NativeTrack, from state: [String: Any], playbackRate: Double) {
+        nowPlayingManager.updateMetadata(
+            for: track,
+            duration: state["duration"] as? Double ?? Double(track.durationMs) / 1000.0,
+            elapsedTime: state["currentTime"] as? Double ?? 0,
+            playbackRate: playbackRate
+        )
+    }
+
+    private func updateNowPlayingPlayback(from state: [String: Any], playbackRate: Double, force: Bool) {
+        nowPlayingManager.updatePlayback(
+            elapsedTime: state["currentTime"] as? Double ?? 0,
+            playbackRate: playbackRate,
+            force: force
+        )
+    }
+
+    private func isSuccessfulPlaybackResponse(_ response: [String: Any]?) -> Bool {
+        response?["status"] as? String == "ok"
     }
 
     private func playbackErrorResponse(code: String, message: String, trackId: String? = nil) -> [String: Any] {

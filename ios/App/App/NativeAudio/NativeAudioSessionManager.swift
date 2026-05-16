@@ -7,6 +7,7 @@ final class NativeAudioSessionManager: NSObject {
     var onRouteChanged: ((String) -> Void)?
 
     private let session = AVAudioSession.sharedInstance()
+    private var isActive = false
 
     override init() {
         super.init()
@@ -34,11 +35,19 @@ final class NativeAudioSessionManager: NSObject {
 
     func activate() throws {
         try configureForPlayback()
+        guard !isActive else { return }
         try session.setActive(true)
+        isActive = true
     }
 
-    func deactivateIfPossible() {
-        try? session.setActive(false, options: [.notifyOthersOnDeactivation])
+    func deactivateIfPossible(keepActiveForQueue: Bool = false) {
+        guard isActive, !keepActiveForQueue else { return }
+        do {
+            try session.setActive(false, options: [.notifyOthersOnDeactivation])
+            isActive = false
+        } catch {
+            NSLog("NativeAudioSessionManager deactivate failed: \(error.localizedDescription)")
+        }
     }
 
     func configureForFuturePlayback() -> [String: Any] {

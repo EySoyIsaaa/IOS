@@ -1,4 +1,4 @@
-# Reproductor nativo iOS básico — checkpoint v7
+# Reproductor nativo iOS básico — checkpoint v8
 
 Fecha: 2026-05-16
 
@@ -26,6 +26,7 @@ Responsabilidades:
 - Desactiva la sesión de forma segura al detener.
 - Observa interrupciones básicas de iOS.
 - Observa cambios básicos de ruta de audio.
+- Mantiene la sesión activa mientras hay playback o cola/track activo para favorecer background playback.
 
 ### `NativeAudioEngine`
 
@@ -39,6 +40,23 @@ Responsabilidades:
 - Calcula duración desde `AVAudioFile.length / sampleRate`.
 - Calcula `currentTime` desde `AVAudioPlayerNode.lastRenderTime` + `playerTime(forNodeTime:)`.
 - Detecta fin de canción con el completion handler `.dataPlayedBack` del segmento programado.
+
+### `NowPlayingManager`
+
+Responsabilidades:
+
+- Publica metadata en `MPNowPlayingInfoCenter.default()`.
+- Incluye título, artista, álbum, duración, elapsed time, playback rate y artwork local cuando existe.
+- Actualiza elapsed/rate en play, pause, seek, stop y cambio de canción.
+- Throttlea actualizaciones no forzadas para no escribir Now Playing demasiadas veces por segundo.
+
+### `RemoteCommandManager`
+
+Responsabilidades:
+
+- Usa `MPRemoteCommandCenter.shared()`.
+- Registra una sola vez handlers para play, pause, toggle, next, previous y seek.
+- Reenvía comandos de pantalla bloqueada/control center hacia `NativePlaybackController`.
 
 ### `NativeQueueManager`
 
@@ -69,6 +87,14 @@ Responsabilidades:
 - `next()`
 - `previous()`
 - `getPlaybackState()`
+
+## Background playback y controles remotos
+
+Ver detalles de la fase MediaPlayer en:
+
+```txt
+docs/migration/IOS_BACKGROUND_PLAYBACK.md
+```
 
 ## Eventos implementados
 
@@ -138,3 +164,4 @@ La ruta actual no inserta nodos DSP entre `AVAudioPlayerNode` y `mainMixerNode`.
 - `currentTime` es aproximado y está basado en frame position del player node.
 - No hay persistencia de cola entre sesiones todavía.
 - No se actualiza `playCount` ni `lastPlayedAt` en esta fase.
+- La pantalla bloqueada/control center no se puede validar en este contenedor sin simulador/dispositivo iOS.

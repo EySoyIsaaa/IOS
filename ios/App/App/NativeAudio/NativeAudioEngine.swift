@@ -41,6 +41,10 @@ final class NativeAudioEngine {
         loadedTrack?.id
     }
 
+    var isCurrentlyPlaying: Bool {
+        isPlaying
+    }
+
     init() {
         engine.attach(playerNode)
         engine.connect(playerNode, to: engine.mainMixerNode, format: nil)
