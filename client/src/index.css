@@ -173,7 +173,7 @@
     min-width: 0;
   }
 
-  /* Safe area for devices with notch and Android 3-button navigation bars */
+  /* Safe area for iPhone devices with notch and home indicator */
   .safe-area-bottom {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }

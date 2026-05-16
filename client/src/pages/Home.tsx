@@ -11,9 +11,9 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
-  useIntegratedAudioProcessor,
+  useIosNativeAudioProcessor,
   type StreamingParams,
-} from "@/hooks/useIntegratedAudioProcessor";
+} from "@/hooks/useIosNativeAudioProcessor";
 import {
   analyzeSpectrumAndSelectPreset,
   applyPresetSmooth,
@@ -24,9 +24,7 @@ import { usePlaylists, type Playlist } from "@/hooks/usePlaylists";
 import { usePresetPersistence } from "@/hooks/usePresetPersistence";
 import { useMediaSession } from "@/hooks/useMediaSession";
 import { useMediaNotification } from "@/hooks/useMediaNotification";
-import { useNotificationPermission } from "@/hooks/useNotificationPermission";
 import { useCrossfade } from "@/hooks/useCrossfade";
-import { useLastTrack } from "@/hooks/useLastTrack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { BottomNavigation } from "@/components/BottomNavigation";
 import { PremiumMiniPlayer } from "@/components/PremiumMiniPlayer";
@@ -54,11 +52,6 @@ import {
   type HomeTabType as TabType,
 } from "@/components/home/types";
 import { useLanguage } from "@/hooks/useLanguage";
-import {
-  useAndroidMusicLibrary,
-  type AndroidAudioFileUrlResult,
-  type AndroidMusicFile,
-} from "@/hooks/useAndroidMusicLibrary";
 import { hiresAudioBadgeUrl, hiresLogoUrl } from "@/lib/assetUrls";
 import { toast } from "sonner";
 
@@ -81,11 +74,6 @@ type HomeNavigationSnapshot = {
   duplicatesModalOpen: boolean;
 };
 
-type ResolvedTrackPlaybackSource = {
-  source: File | string;
-  resolveResult?: AndroidAudioFileUrlResult;
-};
-
 const HOME_NAVIGATION_STATE_KEY = "__epicenterHomeNav";
 
 const clampDspParam = (key: keyof StreamingParams, value: number): number => {
@@ -102,9 +90,6 @@ const clampDspParam = (key: keyof StreamingParams, value: number): number => {
   }
 };
 
-const ANDROID_FAST_STREAMING_ENABLED = false;
-const ANDROID_PREFETCH_ENABLED = false;
-
 const clampDspParams = (params: StreamingParams): StreamingParams => ({
   sweepFreq: clampDspParam("sweepFreq", params.sweepFreq),
   width: clampDspParam("width", params.width),
@@ -114,20 +99,15 @@ const clampDspParams = (params: StreamingParams): StreamingParams => ({
 });
 
 export default function Home() {
-  const audioProcessor = useIntegratedAudioProcessor();
+  const audioProcessor = useIosNativeAudioProcessor();
   const queue = useAudioQueue();
   const presetManager = usePresetPersistence();
   const mediaSession = useMediaSession();
   const mediaNotification = useMediaNotification();
   const crossfade = useCrossfade();
-  const lastTrack = useLastTrack();
   const { t, language, setLanguage } = useLanguage();
   const { theme, toggleTheme, switchable } = useTheme();
   const playlistManager = usePlaylists(queue.library);
-  const androidMusicLibrary = useAndroidMusicLibrary();
-
-  // Solicitar permiso de notificaciones en Android 13+
-  useNotificationPermission();
 
   const [activeTab, setActiveTab] = useState<TabType>("player");
   const [libraryView, setLibraryView] = useState<LibraryView>("main");
@@ -138,7 +118,6 @@ export default function Home() {
   const [showQueue, setShowQueue] = useState(false);
   const [pendingTrack, setPendingTrack] = useState<Track | null>(null);
   const [nowPlayingTrack, setNowPlayingTrack] = useState<Track | null>(null);
-  const [activeAudioSource, setActiveAudioSource] = useState("");
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const [dspParams, setDspParams] = useState<StreamingParams>({
     sweepFreq: 45,
@@ -379,33 +358,6 @@ export default function Home() {
     nowPlayingTrack,
   ]);
 
-  // Mantener CPU/IO despiertos sólo mientras realmente hay reproducción activa.
-  useEffect(() => {
-    const MusicScanner = (window as any).Capacitor?.Plugins?.MusicScanner;
-    const shouldHoldWakeLock = audioProcessor.isPlaying && !!nowPlayingTrack?.id;
-    const trackId = nowPlayingTrack?.id ?? "none";
-
-    if (shouldHoldWakeLock) {
-      console.info("[PlaybackWakeLock] acquire", { trackId });
-      void MusicScanner?.acquirePlaybackWakeLock?.({ trackId }).catch((error: unknown) => {
-        console.warn("[PlaybackWakeLock] acquire failed", { trackId, error });
-      });
-    } else {
-      console.info("[PlaybackWakeLock] release", { reason: "not-playing", trackId });
-      void MusicScanner?.releasePlaybackWakeLock?.({ reason: "not-playing", trackId }).catch((error: unknown) => {
-        console.warn("[PlaybackWakeLock] release failed", { trackId, error });
-      });
-    }
-
-    return () => {
-      if (!shouldHoldWakeLock) return;
-      console.info("[PlaybackWakeLock] release", { reason: "effect-cleanup", trackId });
-      void MusicScanner?.releasePlaybackWakeLock?.({ reason: "effect-cleanup", trackId }).catch((error: unknown) => {
-        console.warn("[PlaybackWakeLock] cleanup release failed", { trackId, error });
-      });
-    };
-  }, [audioProcessor.isPlaying, nowPlayingTrack?.id]);
-
   // Actualizar posición sin saturar el bridge nativo durante reproducción.
   useEffect(() => {
     if (audioProcessor.duration <= 0) return;
@@ -455,129 +407,34 @@ export default function Home() {
     }
   }, []);
 
-  const resolveTrackSource = useCallback(
-    async (
-      track: Track,
-      context?: { requestId?: number; reason?: string },
-    ): Promise<ResolvedTrackPlaybackSource> => {
-      if (track.sourceUri && track.sourceType !== "file") {
-        if (track.unavailable) {
-          throw new Error("Track source not available");
+
+  const requestTrackPlayback = useCallback(
+    (requestedTrack: Track, reason: string) => {
+      if (!requestedTrack) return;
+
+      const requestId = ++trackLoadRequestRef.current;
+      clearPendingPlaybackTimers();
+      currentTrackRef.current = requestedTrack.id;
+      setPendingTrack(requestedTrack);
+      setNowPlayingTrack(requestedTrack);
+      console.info("[iOS Native Playback] request", {
+        reason,
+        requestId,
+        trackId: requestedTrack.id,
+        title: requestedTrack.title,
+      });
+
+      void audioProcessor.playTrackId(requestedTrack.id).then((played) => {
+        if (trackLoadRequestRef.current !== requestId) return;
+        setPendingTrack(null);
+        if (!played) {
+          currentTrackRef.current = null;
+          toast.error(t("actions.errorLoadingTrackNoFallback"));
         }
-
-        const resolveStartMs = performance.now();
-        const stableLibraryTrack =
-          queue.library.find((libraryTrack) => libraryTrack.id === track.id) ??
-          (track.sourceTrackId
-            ? queue.library.find(
-                (libraryTrack) => libraryTrack.id === track.sourceTrackId,
-              )
-            : null) ??
-          queue.library.find(
-            (libraryTrack) => libraryTrack.sourceUri === track.sourceUri,
-          );
-
-        const resolvedTrackId = stableLibraryTrack?.id ?? track.sourceTrackId ?? track.id;
-        const result = await androidMusicLibrary.getAudioFileUrlResult(
-          track.sourceUri,
-          resolvedTrackId,
-          {
-            expectedSize: stableLibraryTrack?.fileSize ?? track.fileSize,
-            sourceVersionKey: stableLibraryTrack?.sourceVersionKey ?? track.sourceVersionKey,
-            allowStreaming: ANDROID_FAST_STREAMING_ENABLED,
-          },
-        );
-        const fileUrl = result?.url ?? null;
-        console.info("[RESOLVE_RESULT]", {
-          requestId: context?.requestId ?? trackLoadRequestRef.current,
-          reason: context?.reason,
-          source: fileUrl,
-          sourceType: track.sourceType,
-          sourceUriScheme: result?.sourceUriScheme,
-          playbackSource: result?.playbackSource,
-          streamUrlUsed: !!result?.streamUrl,
-          localhostUsed: !!fileUrl?.startsWith("http://127.0.0.1"),
-          filePathUsed: !!result?.filePath || (!!fileUrl && !fileUrl.startsWith("http://127.0.0.1")),
-          cacheHit: result?.cacheHit ?? result?.cached ?? false,
-          copyTimeMs: result?.copyTimeMs ?? 0,
-          resolveDurationMs: result?.resolveDurationMs ?? performance.now() - resolveStartMs,
-        });
-        console.info("[LOAD_DEBUG_SOURCE]", {
-          requestedTrackId: track.id,
-          requestedTrackSourceTrackId: track.sourceTrackId,
-          requestedTrackTitle: track.title,
-          requestedTrackSourceType: track.sourceType,
-          requestedTrackSourceUri: track.sourceUri,
-          requestedTrackMediaStoreId: track.mediaStoreId,
-          requestedTrackFileSize: track.fileSize,
-          stableLibraryTrackId: stableLibraryTrack?.id,
-          resolvedTrackId,
-          sourceFinal: fileUrl,
-        });
-        const resolveEndMs = performance.now();
-        console.info("[PlaybackLatency] resolveTrackSource", {
-          trackId: track.id,
-          sourceTrackId: track.sourceTrackId,
-          sourceUri: track.sourceUri,
-          resolveStartMs,
-          resolveEndMs,
-          resolveDurationMs: resolveEndMs - resolveStartMs,
-        });
-
-        if (!fileUrl) {
-          throw new Error("No se pudo obtener el audio del dispositivo");
-        }
-
-        return { source: fileUrl, resolveResult: result ?? undefined };
-      }
-
-      const trackFile = track.file ?? (await queue.getTrackFile(track));
-      if (!trackFile) {
-        throw new Error("Track source not available");
-      }
-
-      return { source: trackFile };
+      });
     },
-    [androidMusicLibrary, queue.getTrackFile, queue.library],
+    [audioProcessor, clearPendingPlaybackTimers, t],
   );
-
-
-  useEffect(() => {
-    if (!ANDROID_PREFETCH_ENABLED) return;
-    const nextTrack = queue.queue[queue.currentTrackIndex + 1];
-    if (!nextTrack || !nextTrack.sourceUri || nextTrack.sourceType === "file") {
-      return;
-    }
-
-    const prefetchKey = `${nextTrack.sourceTrackId ?? nextTrack.id}:${nextTrack.sourceUri}:${nextTrack.sourceVersionKey ?? ""}`;
-    if (nextPrefetchKeyRef.current === prefetchKey) {
-      return;
-    }
-    nextPrefetchKeyRef.current = prefetchKey;
-
-    const stableLibraryTrack =
-      queue.library.find((libraryTrack) => libraryTrack.id === nextTrack.id) ??
-      (nextTrack.sourceTrackId
-        ? queue.library.find((libraryTrack) => libraryTrack.id === nextTrack.sourceTrackId)
-        : undefined) ??
-      queue.library.find(
-        (libraryTrack) => libraryTrack.sourceUri === nextTrack.sourceUri,
-      );
-
-    void androidMusicLibrary.prepareAudioFileUrl?.(
-      nextTrack.sourceUri,
-      stableLibraryTrack?.id ?? nextTrack.sourceTrackId ?? nextTrack.id,
-      {
-        expectedSize: stableLibraryTrack?.fileSize ?? nextTrack.fileSize,
-        sourceVersionKey: stableLibraryTrack?.sourceVersionKey ?? nextTrack.sourceVersionKey,
-      },
-    );
-  }, [
-    androidMusicLibrary,
-    queue.currentTrackIndex,
-    queue.library,
-    queue.queue,
-  ]);
 
   const playNextAvailableTrackAfterFailure = useCallback(
     (failedQueueTrackId: string) => {
@@ -668,272 +525,6 @@ export default function Home() {
     };
   }, [clearPendingPlaybackTimers]);
 
-  useEffect(() => {
-    const reconcileMediaStore = async () => {
-      if (queue.isLoading || !androidMusicLibrary.isAndroid) return;
-
-      const hasMediaStoreTracks = queue.library.some(
-        (track) => track.sourceType === "media-store",
-      );
-
-      if (!hasMediaStoreTracks) return;
-      if (mediaStoreReconciledRef.current) return;
-
-      const hasPermission = await androidMusicLibrary.checkPermissions();
-      if (!hasPermission) return;
-
-      try {
-        const scannedTracks = await androidMusicLibrary.scanMusicLibrary();
-        const result = await queue.reconcileMediaStoreTracks(scannedTracks);
-        mediaStoreReconciledRef.current = true;
-        if (result.updated > 0 || result.missing > 0) {
-          console.info("[Library] MediaStore reconciled", result);
-        }
-      } catch (error) {
-        console.warn("[Library] MediaStore reconciliation failed", error);
-      }
-    };
-
-    void reconcileMediaStore();
-  }, [
-    androidMusicLibrary,
-    queue.isLoading,
-    queue.library,
-    queue.reconcileMediaStoreTracks,
-  ]);
-
-  // Cargar última canción al iniciar (sin autoplay)
-  const lastTrackLoadedRef = useRef(false);
-  useEffect(() => {
-    const loadLastTrack = async () => {
-      if (
-        !queue.isLoading &&
-        lastTrack.isLoaded &&
-        lastTrack.lastTrackId &&
-        !queue.currentTrack &&
-        !lastTrackLoadedRef.current
-      ) {
-        lastTrackLoadedRef.current = true;
-
-        const track = queue.library.find((t) => t.id === lastTrack.lastTrackId);
-        if (!track) return;
-
-        const requestId = ++trackLoadRequestRef.current;
-        clearPendingPlaybackTimers();
-        currentTrackRef.current = track.id;
-
-        console.log("[LastTrack] Loading last track:", track.title);
-        queue.addToQueue(track);
-        queue.playTrack(0);
-
-        try {
-          const { source } = await resolveTrackSource(track, {
-            requestId,
-            reason: "restore_last_track",
-          });
-
-          if (trackLoadRequestRef.current !== requestId) {
-            return;
-          }
-
-          const loaded = await audioProcessor.loadFile(source, dspParams, {
-            requestId,
-            isCurrentRequest: () => trackLoadRequestRef.current === requestId,
-          });
-
-          if (!loaded || trackLoadRequestRef.current !== requestId) {
-            return;
-          }
-        } catch (error) {
-          if (trackLoadRequestRef.current === requestId) {
-            currentTrackRef.current = null;
-            console.error("[LastTrack] Error loading last track:", error);
-          }
-        }
-      }
-    };
-
-    void loadLastTrack();
-  }, [
-    audioProcessor,
-    clearPendingPlaybackTimers,
-    dspParams,
-    lastTrack.isLoaded,
-    lastTrack.lastTrackId,
-    queue.addToQueue,
-    queue.isLoading,
-    queue.library,
-    queue.playTrack,
-    resolveTrackSource,
-  ]);
-
-  const requestTrackPlayback = useCallback(
-    (requestedTrack: Track, reason: string) => {
-      if (!requestedTrack) return;
-
-      const requestId = ++trackLoadRequestRef.current;
-      clearPendingPlaybackTimers();
-      currentTrackRef.current = requestedTrack.id;
-      setPendingTrack(requestedTrack);
-      console.info("[PLAYBACK_REQUEST]", {
-        reason,
-        requestId,
-        requestedTrackId: requestedTrack.id,
-        title: requestedTrack.title,
-        sourceUri: requestedTrack.sourceUri,
-        sourceType: requestedTrack.sourceType,
-        currentNowPlayingId: nowPlayingTrack?.id,
-        pendingTrackId: requestedTrack.id,
-        activeAudioSource,
-      });
-
-      const loadTrack = async () => {
-        const libraryTrack = queue.library.find(
-          (track) => track.id === requestedTrack.id,
-        ) ?? (requestedTrack.sourceTrackId
-          ? queue.library.find((track) => track.id === requestedTrack.sourceTrackId)
-          : undefined) ?? queue.library.find(
-          (track) =>
-            !!requestedTrack.sourceUri && track.sourceUri === requestedTrack.sourceUri,
-        );
-
-        if (libraryTrack) {
-          lastTrack.saveLastTrack(libraryTrack.id);
-        }
-
-        try {
-          const playbackRequestStartMs = performance.now();
-          const resolveStartMs = playbackRequestStartMs;
-          const { source, resolveResult } = await resolveTrackSource(requestedTrack, {
-            requestId,
-            reason,
-          });
-          const resolveEndMs = performance.now();
-
-          if (
-            trackLoadRequestRef.current !== requestId ||
-            currentTrackIdRef.current !== requestedTrack.id
-          ) {
-            console.info("[PLAYBACK_CANCELLED]", { requestId, reason: "after_resolve" });
-            return;
-          }
-
-          const loadFileStartMs = performance.now();
-          const loaded = await audioProcessor.loadFile(source, dspParams, {
-            requestId,
-            isCurrentRequest: () =>
-              trackLoadRequestRef.current === requestId &&
-              currentTrackIdRef.current === requestedTrack.id,
-          });
-          const loadFileEndMs = performance.now();
-          const isCurrentAfterLoad =
-            trackLoadRequestRef.current === requestId &&
-            currentTrackIdRef.current === requestedTrack.id;
-          console.info("[LOAD_FILE_RESULT]", {
-            requestId,
-            loaded,
-            source,
-            isCurrentRequest: isCurrentAfterLoad,
-          });
-
-          if (!loaded || !isCurrentAfterLoad) {
-            console.info("[PLAYBACK_CANCELLED]", {
-              requestId,
-              reason: loaded ? "stale_after_load" : "load_failed_or_cancelled",
-            });
-            return;
-          }
-
-          const activeSrc = audioProcessor.getActiveSource();
-          if (!activeSrc) {
-            console.info("[PLAYBACK_CANCELLED]", { requestId, reason: "missing_active_source" });
-            return;
-          }
-          setNowPlayingTrack(requestedTrack);
-          setPendingTrack(null);
-          setActiveAudioSource(activeSrc);
-          console.info("[NOW_PLAYING_COMMIT]", {
-            requestId,
-            reason,
-            title: requestedTrack.title,
-            activeSrc,
-            totalTimeToCommitMs: loadFileEndMs - playbackRequestStartMs,
-            streamUrlUsed: !!resolveResult?.streamUrl,
-            playbackSource: resolveResult?.playbackSource,
-            sourceUriScheme: resolveResult?.sourceUriScheme,
-          });
-
-          const playCallMs = performance.now();
-          console.info("[PlaybackLatency] playRequest", {
-            trackId: requestedTrack.id,
-            sourceTrackId: requestedTrack.sourceTrackId,
-            playbackRequestStartMs,
-            resolveStartMs,
-            resolveEndMs,
-            loadFileStartMs,
-            loadFileEndMs,
-            playCallMs,
-            resolveDurationMs: resolveEndMs - resolveStartMs,
-            loadFileDurationMs: loadFileEndMs - loadFileStartMs,
-            totalBeforePlayMs: playCallMs - playbackRequestStartMs,
-          });
-          audioProcessor.play();
-
-          autoOptimizationTimeoutRef.current = window.setTimeout(() => {
-            if (
-              trackLoadRequestRef.current !== requestId ||
-              currentTrackIdRef.current !== requestedTrack.id
-            ) {
-              return;
-            }
-
-            void runAutoOptimization();
-          }, 1400);
-        } catch (error) {
-          if (
-            trackLoadRequestRef.current === requestId &&
-            currentTrackIdRef.current === requestedTrack.id
-          ) {
-            failedQueueTrackIdsRef.current.add(requestedTrack.id);
-            audioProcessor.resetAfterError();
-            currentTrackRef.current = null;
-            console.error("[PLAYBACK_ERROR]", {
-              requestId,
-              error,
-              activeSrc: audioProcessor.getActiveSource(),
-              requestedTrackId: requestedTrack.id,
-            });
-            setPendingTrack(null);
-            const movedToNextTrack = playNextAvailableTrackAfterFailure(
-              requestedTrack.id,
-            );
-
-            if (movedToNextTrack) {
-              toast.error(t("actions.errorLoadingTrackSkipped"));
-            } else {
-              failedQueueTrackIdsRef.current.clear();
-              toast.error(t("actions.errorLoadingTrackNoFallback"));
-            }
-          }
-        }
-      };
-
-      void loadTrack();
-    },
-    [
-      audioProcessor,
-      clearPendingPlaybackTimers,
-      dspParams,
-      lastTrack.saveLastTrack,
-      queue.library,
-      resolveTrackSource,
-      playNextAvailableTrackAfterFailure,
-      activeAudioSource,
-      nowPlayingTrack,
-      t,
-    ],
-  );
-
   // Cargar track cuando cambia (y guardar como último track)
   useEffect(() => {
     const requestedTrack = queue.currentTrack;
@@ -948,12 +539,8 @@ export default function Home() {
   }, [queue.currentTrack, requestTrackPlayback]);
 
   const handleFileSelect = useCallback(async () => {
-    const capacitor = (window as any).Capacitor;
-    const musicScanner = capacitor?.Plugins?.MusicScanner;
-    const platform = typeof capacitor?.getPlatform === "function" ? capacitor.getPlatform() : "";
-    const isAndroidNative = !!musicScanner && (platform === "android" || /android/.test(navigator.userAgent.toLowerCase()));
-
-    const handleImportResult = (result: { added: number; duplicates: string[] }) => {
+    try {
+      const result = await queue.importManualTracksFromNativePicker();
       if (result.added > 0) {
         const msg =
           result.added > 1
@@ -965,66 +552,13 @@ export default function Home() {
       if (result.duplicates.length > 0) {
         setShowDuplicatesModal(result.duplicates);
       }
-    };
-
-    try {
-      if (isAndroidNative) {
-        console.info("[ManualImport] using native Android picker", { platform });
-        const result = await queue.importManualTracksFromNativePicker();
-        handleImportResult(result);
-        return;
-      }
-      console.info("[ManualImport] using Web file picker fallback", { platform, hasMusicScanner: !!musicScanner });
-
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = "audio/*,.mp3,.wav,.flac,.ogg,.m4a,.aac";
-      input.multiple = true;
-      input.onchange = async (e) => {
-        const files = Array.from((e.target as HTMLInputElement).files || []);
-        if (files.length === 0) return;
-        try {
-          const result = await queue.addToLibrary(files);
-          handleImportResult(result);
-        } catch (error) {
-          console.error("[ManualImport] Web fallback failed", error);
-          toast.error(t("actions.errorAddingSongs"), {
-            description: error instanceof Error ? error.message : undefined,
-          });
-        }
-      };
-      input.click();
     } catch (error) {
-      console.error("[ManualImport] Native import failed", error);
+      console.error("[iOS Native Library] import failed", error);
       toast.error(t("actions.errorAddingSongs"), {
         description: error instanceof Error ? error.message : undefined,
       });
     }
   }, [queue, t]);
-
-  const handleMediaStoreImport = useCallback(
-    async (tracks: AndroidMusicFile[]) => {
-      const result = await queue.addMediaStoreTracks(
-        tracks,
-        androidMusicLibrary.getAlbumArt,
-      );
-
-      if (result.added > 0) {
-        const msg =
-          result.added > 1
-            ? t("actions.songsAddedPlural", { count: result.added })
-            : t("actions.songsAdded", { count: result.added });
-        toast.success(msg);
-      }
-
-      if (result.duplicates.length > 0) {
-        setShowDuplicatesModal(result.duplicates);
-      }
-
-      return result;
-    },
-    [queue, t],
-  );
 
   const updateDspParam = useCallback(
     (key: keyof StreamingParams, value: number) => {
@@ -1712,7 +1246,6 @@ export default function Home() {
           setPlaylistMenu={setPlaylistMenu}
           onCreatePlaylist={() => setShowCreatePlaylist(true)}
           onOpenFilePicker={handleFileSelect}
-          onImportMediaStoreTracks={handleMediaStoreImport}
           onPlayNow={handlePlayNow}
           onAddToQueue={handleAddToQueue}
           onPlayNext={handlePlayNext}
