@@ -8,6 +8,8 @@ public class EpicenterNativePlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "importTracks", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getLibraryPage", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getTrack", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "deleteTrack", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPlaybackState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "play", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pause", returnType: CAPPluginReturnPromise),
@@ -17,14 +19,31 @@ public class EpicenterNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setReverbEnabled", returnType: CAPPluginReturnPromise),
     ]
 
-    private let importer = NativeTrackImporter()
     private let repository = NativeTrackRepository()
+    private lazy var importer = NativeTrackImporter(repository: repository)
     private let playbackController = NativePlaybackController()
     private let eqProcessor = EQ31BandProcessor()
     private let reverbProcessor = ReverbProcessor()
 
     @objc func importTracks(_ call: CAPPluginCall) {
-        call.resolve(importer.importTracks())
+        guard let presenter = bridge?.viewController else {
+            call.reject("Unable to present the iOS document picker")
+            return
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            self?.importer.importTracks(from: presenter) { result in
+                switch result {
+                case .success(let tracks):
+                    call.resolve([
+                        "status": "ok",
+                        "tracks": tracks.map { $0.dictionary },
+                    ])
+                case .failure(let error):
+                    call.reject("Unable to import tracks", nil, error)
+                }
+            }
+        }
     }
 
     @objc func getLibraryPage(_ call: CAPPluginCall) {
@@ -33,6 +52,26 @@ public class EpicenterNativePlugin: CAPPlugin, CAPBridgedPlugin {
         let search = call.getString("search")
         let sort = call.getString("sort")
         call.resolve(repository.getLibraryPage(offset: offset, limit: limit, search: search, sort: sort))
+    }
+
+    @objc func getTrack(_ call: CAPPluginCall) {
+        guard let id = call.getString("id"), !id.isEmpty else {
+            call.reject("Track id is required")
+            return
+        }
+        call.resolve(repository.getTrack(id: id))
+    }
+
+    @objc func deleteTrack(_ call: CAPPluginCall) {
+        guard let id = call.getString("id"), !id.isEmpty else {
+            call.reject("Track id is required")
+            return
+        }
+        do {
+            call.resolve(try repository.deleteTrack(id: id))
+        } catch {
+            call.reject("Unable to delete track", nil, error)
+        }
     }
 
     @objc func getPlaybackState(_ call: CAPPluginCall) {
