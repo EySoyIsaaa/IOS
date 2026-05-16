@@ -4,16 +4,8 @@ const config: CapacitorConfig = {
   appId: 'com.epicenter.hifi',
   appName: 'EpicenterDSP Player',
   webDir: 'dist/public',
-  server: {
-    androidScheme: 'https',
-  },
   ios: {
     scheme: 'EpicenterDSP',
-  },
-  android: {
-    backgroundColor: '#000000',
-    allowMixedContent: true,
-    webContentsDebuggingEnabled: false,
   },
   plugins: {
     SplashScreen: {
