@@ -122,11 +122,15 @@ public class EpicenterNativePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func next(_ call: CAPPluginCall) {
-        call.resolve(playbackController.next())
+        let requestId = call.getString("requestId") ?? "bridge-next-\(Date().timeIntervalSince1970)"
+        NSLog("[Bridge] next command received requestId=\(requestId)")
+        call.resolve(playbackController.next(source: "bridge", requestId: requestId))
     }
 
     @objc func previous(_ call: CAPPluginCall) {
-        call.resolve(playbackController.previous())
+        let requestId = call.getString("requestId") ?? "bridge-previous-\(Date().timeIntervalSince1970)"
+        NSLog("[Bridge] previous command received requestId=\(requestId)")
+        call.resolve(playbackController.previous(source: "bridge", requestId: requestId))
     }
 
     @objc func setEpicenterEnabled(_ call: CAPPluginCall) {

@@ -111,6 +111,9 @@ export interface QueueController {
 
 const DEFAULT_PAGE_SIZE = 1000;
 
+const nextRequestId = (action: "next" | "previous") =>
+  `webqueue-${action}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
 const nativeTrackToTrack = nativeTrackToAppTrack;
 
 const isValidTrack = (track: Track | null | undefined): track is Track =>
@@ -339,30 +342,28 @@ export function useAudioQueue(): QueueController {
   }, []);
 
   const nextTrack = useCallback(() => {
-    const before = currentTrackIndex;
-    const after = before < queue.length - 1 ? before + 1 : before;
-    console.info("[Queue] next requested", {
-      before,
-      after,
-      queueLength: queue.length,
-    });
-    if (after !== before) {
-      moveToQueueIndex(after, "next");
-    }
-  }, [currentTrackIndex, moveToQueueIndex, queue.length]);
+    const requestId = nextRequestId("next");
+    console.info(
+      `[WebQueue] nextTrack called requestId=${requestId} platform=ios action=delegating-to-native`,
+      {
+        currentIndex: currentTrackIndex,
+        queueLength: queue.length,
+      },
+    );
+    void EpicenterNative.next({ requestId });
+  }, [currentTrackIndex, queue.length]);
 
   const previousTrack = useCallback(() => {
-    const before = currentTrackIndex;
-    const after = before > 0 ? before - 1 : before;
-    console.info("[Queue] previous requested", {
-      before,
-      after,
-      queueLength: queue.length,
-    });
-    if (after !== before) {
-      moveToQueueIndex(after, "previous");
-    }
-  }, [currentTrackIndex, moveToQueueIndex, queue.length]);
+    const requestId = nextRequestId("previous");
+    console.info(
+      `[WebQueue] previousTrack called requestId=${requestId} platform=ios action=delegating-to-native`,
+      {
+        currentIndex: currentTrackIndex,
+        queueLength: queue.length,
+      },
+    );
+    void EpicenterNative.previous({ requestId });
+  }, [currentTrackIndex, queue.length]);
 
   const syncCurrentTrackById = useCallback(
     (trackId: string) => {

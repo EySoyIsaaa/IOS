@@ -407,6 +407,9 @@ export default function Home() {
     });
   }, [crossfade.enabled, crossfade.duration, audioProcessor]);
 
+  const createPlaybackRequestId = (action: "next" | "previous") =>
+    `ui-${action}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
   const handleNextTrack = useCallback(
     (
       source:
@@ -416,6 +419,10 @@ export default function Home() {
         | "autoplay"
         | "unsupported-skip" = "ui",
     ) => {
+      const requestId = createPlaybackRequestId("next");
+      if (source === "ui") {
+        console.info(`[UI] next click requestId=${requestId}`);
+      }
       console.info(
         source === "media-session"
           ? "[MediaSession] next requested"
@@ -425,11 +432,12 @@ export default function Home() {
           currentIndex: queue.currentTrackIndex,
           queueLength: queue.queue.length,
           currentTrackId: queue.currentTrack?.id,
+          requestId,
         },
       );
       playbackReasonRef.current =
         source === "unsupported-skip" ? "unsupported-skip" : "next";
-      void audioProcessor.next();
+      void audioProcessor.next(requestId);
     },
     [
       audioProcessor,
@@ -441,6 +449,10 @@ export default function Home() {
 
   const handlePreviousTrack = useCallback(
     (source: "media-session" | "notification" | "ui" = "ui") => {
+      const requestId = createPlaybackRequestId("previous");
+      if (source === "ui") {
+        console.info(`[UI] previous click requestId=${requestId}`);
+      }
       console.info(
         source === "media-session"
           ? "[MediaSession] previous requested"
@@ -450,10 +462,11 @@ export default function Home() {
           currentIndex: queue.currentTrackIndex,
           queueLength: queue.queue.length,
           currentTrackId: queue.currentTrack?.id,
+          requestId,
         },
       );
       playbackReasonRef.current = "previous";
-      void audioProcessor.previous();
+      void audioProcessor.previous(requestId);
     },
     [
       audioProcessor,
