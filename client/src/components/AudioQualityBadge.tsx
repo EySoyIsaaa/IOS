@@ -48,7 +48,7 @@ export function AudioQualityBadge({
         }`}
         data-testid="quality-badge-compact"
       >
-        {parts.join(" • ").replace("-bit ", "b/").replace("kHz", "k")}
+        {`${qualityClassLabel(qualityClass)}${parts.length ? ` • ${parts.join(" • ").replace("-bit ", "b/").replace("kHz", "k")}` : ""}`}
       </span>
     );
   }

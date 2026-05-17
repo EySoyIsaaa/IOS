@@ -238,7 +238,7 @@ void EpicenterDSPCore::ensureState(int channelCount, float sweepFreq, float widt
 
 float EpicenterDSPCore::computeGate(float monoEnv, float diffEnv, float weightedDetectorEnv) const {
     const float musicRatio = diffEnv / (monoEnv + 1.0e-6f);
-    const float detectorActivity = std::min(1.0f, weightedDetectorEnv * 9.5f);
+    const float detectorActivity = std::min(1.0f, weightedDetectorEnv * 10.5f);
     const float musicScore = clampf(musicRatio * 3.2f, 0, 1);
     const float musicalGate = detectorActivity * (GATE_DETECTOR_FLOOR + musicScore * (1.0f - GATE_DETECTOR_FLOOR));
     const float detectorSustain = std::max(0.0f, detectorActivity - 0.50f) * GATE_DETECTOR_AUTHORITY;
