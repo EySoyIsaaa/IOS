@@ -390,7 +390,10 @@ export default function Home() {
       );
       if (
         updated &&
-        updated.trackIds.length !== selectedPlaylist.trackIds.length
+        (Array.isArray(updated.trackIds) ? updated.trackIds.length : 0) !==
+          (Array.isArray(selectedPlaylist.trackIds)
+            ? selectedPlaylist.trackIds.length
+            : 0)
       ) {
         setSelectedPlaylist(updated);
       }
@@ -1089,7 +1092,12 @@ export default function Home() {
     if (!selectedPlaylist) return;
 
     // Check if already in playlist
-    if (selectedPlaylist.trackIds.includes(track.id)) {
+    if (!track?.id) return;
+
+    const selectedTrackIds = Array.isArray(selectedPlaylist.trackIds)
+      ? selectedPlaylist.trackIds
+      : [];
+    if (selectedTrackIds.includes(track.id)) {
       toast.error(t("duplicates.alreadyInPlaylist"));
       return;
     }

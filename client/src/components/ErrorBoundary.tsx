@@ -13,7 +13,11 @@ interface State {
 
 const formatBoundaryError = (error: unknown): string => {
   if (error instanceof Error) {
-    return error.stack || error.message || error.name;
+    return [
+      `name: ${error.name || "Error"}`,
+      `message: ${error.message || "(no message)"}`,
+      `stack:\n${error.stack || "(no stack)"}`,
+    ].join("\n\n");
   }
   if (typeof error === "string") return error;
   try {

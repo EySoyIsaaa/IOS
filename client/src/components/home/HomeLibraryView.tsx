@@ -144,6 +144,11 @@ export function HomeLibraryView({
     }
     return true;
   });
+  const selectedPlaylistTracks = Array.isArray(selectedPlaylist?.tracks)
+    ? selectedPlaylist.tracks.filter((track): track is Track =>
+        Boolean(track?.id),
+      )
+    : [];
 
   return (
     <div
@@ -479,17 +484,17 @@ export function HomeLibraryView({
               </div>
             </button>
 
-            {selectedPlaylist.tracks.length > 0 && (
+            {selectedPlaylistTracks.length > 0 && (
               <div className="flex flex-wrap items-center gap-3 mb-4">
                 <button
-                  onClick={() => onPlayInOrder(selectedPlaylist.tracks)}
+                  onClick={() => onPlayInOrder(selectedPlaylistTracks)}
                   className="flex items-center gap-2 px-5 py-2 rounded-full bg-[var(--ep-red)] text-white font-semibold shadow-sm"
                 >
                   <Play className="w-4 h-4" fill="currentColor" />
                   {t("actions.play")}
                 </button>
                 <button
-                  onClick={() => onShufflePlay(selectedPlaylist.tracks)}
+                  onClick={() => onShufflePlay(selectedPlaylistTracks)}
                   className="flex items-center gap-2 px-5 py-2 rounded-full border border-[var(--ep-border)] text-white"
                 >
                   <Shuffle className="w-4 h-4" />
@@ -498,7 +503,7 @@ export function HomeLibraryView({
               </div>
             )}
 
-            {selectedPlaylist.tracks.length === 0 ? (
+            {selectedPlaylistTracks.length === 0 ? (
               <div className="text-center py-8">
                 <ListMusic
                   className="w-16 h-16 text-zinc-800 mx-auto mb-4"
@@ -507,35 +512,29 @@ export function HomeLibraryView({
                 <p className="text-zinc-500 mb-2">{t("playlists.empty")}</p>
               </div>
             ) : (
-              (Array.isArray(selectedPlaylist.tracks)
-                ? selectedPlaylist.tracks
-                : []
-              )
-                .filter((track): track is Track => Boolean(track?.id))
-                .map((track) => (
+              selectedPlaylistTracks.map((track) => (
+                <div
+                  key={track.id}
+                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-900/50 transition-colors"
+                >
                   <div
                     key={track.id}
                     className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-900/50 transition-colors"
                   >
-                    <div
-                      className="flex-1 flex items-center gap-3 min-w-0 cursor-pointer"
-                      onClick={() => onPlayNow(track)}
-                    >
-                      <div className="w-10 h-10 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0">
-                        <TrackArtwork
-                          src={track.coverUrl}
-                          alt={safeTitle(track)}
-                          iconClassName="w-5 h-5 text-zinc-500"
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {safeTitle(track)}
-                        </p>
-                        <p className="text-xs text-zinc-500 truncate">
-                          {safeArtist(track)}
-                        </p>
-                      </div>
+                    <div className="w-10 h-10 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0">
+                      <TrackArtwork
+                        src={track.coverUrl}
+                        alt={safeTitle(track)}
+                        iconClassName="w-5 h-5 text-zinc-500"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {safeTitle(track)}
+                      </p>
+                      <p className="text-xs text-zinc-500 truncate">
+                        {safeArtist(track)}
+                      </p>
                     </div>
                     <button
                       onClick={() => onRemoveFromPlaylist(track)}
