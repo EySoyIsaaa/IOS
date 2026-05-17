@@ -115,7 +115,10 @@
     "sessionOnly": "Solo sesión",
     "persistTrack": "Guardar en dispositivo",
     "persistTrackSuccess": "Canción guardada correctamente en almacenamiento local",
-    "persistTrackFailed": "No se pudo guardar la canción de forma persistente"
+    "persistTrackFailed": "No se pudo guardar la canción de forma persistente",
+    "unsupportedHiResFormat": "Este archivo Hi-Res excede el formato soportado por el motor DSP actual.",
+    "panelErrorTitle": "No se pudieron mostrar las acciones",
+    "panelErrorDescription": "Cierra este panel e intenta de nuevo. La reproducción no se detuvo."
   },
   "duplicates": {
     "title": "Canciones Duplicadas",

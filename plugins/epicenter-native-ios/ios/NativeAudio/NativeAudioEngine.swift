@@ -64,6 +64,8 @@ final class NativeAudioEngine {
     private static let maxNativeReverbWetDryMix: Float = 55
     private static let maxConcertHallWetDryMix: Float = 45
     private static let maxFullBufferMemoryBytes: Int64 = 512 * 1024 * 1024
+    private static let maxSafeDSPBitDepth = 24
+    private static let maxSafeDSPSampleRate = 192_000.0
 
     var onTrackFinished: ((NativeTrack) -> Void)?
 
@@ -123,6 +125,14 @@ final class NativeAudioEngine {
         guard FileManager.default.fileExists(atPath: localFilePath) else {
             throw EngineError.fileUnavailable(localFilePath)
         }
+        if let bitDepth = track.bitDepth, bitDepth > NativeAudioEngine.maxSafeDSPBitDepth {
+            print("[AudioCompat] unsupported reason=bitDepth \(bitDepth) exceeds \(NativeAudioEngine.maxSafeDSPBitDepth)")
+            throw EngineError.audioFormatError("Este archivo Hi-Res excede el formato soportado por el motor DSP actual.")
+        }
+        if let sampleRate = track.sampleRate, Double(sampleRate) > NativeAudioEngine.maxSafeDSPSampleRate {
+            print("[AudioCompat] unsupported reason=sampleRate \(sampleRate) exceeds \(Int(NativeAudioEngine.maxSafeDSPSampleRate))")
+            throw EngineError.audioFormatError("Este archivo Hi-Res excede el formato soportado por el motor DSP actual.")
+        }
 
         scheduleToken += 1
         if engine.isRunning {
@@ -137,6 +147,10 @@ final class NativeAudioEngine {
             )
             guard file.processingFormat.sampleRate > 0, file.processingFormat.channelCount > 0 else {
                 throw EngineError.audioFormatError("Audio format is missing sample rate or channel count")
+            }
+            guard file.processingFormat.sampleRate <= NativeAudioEngine.maxSafeDSPSampleRate else {
+                print("[AudioCompat] unsupported reason=processing sampleRate \(file.processingFormat.sampleRate) exceeds \(NativeAudioEngine.maxSafeDSPSampleRate)")
+                throw EngineError.audioFormatError("Este archivo Hi-Res excede el formato soportado por el motor DSP actual.")
             }
             let estimatedMemoryBytes = estimatedDecodedMemoryBytes(for: file)
             let estimatedMemoryMB = Double(estimatedMemoryBytes) / 1024.0 / 1024.0

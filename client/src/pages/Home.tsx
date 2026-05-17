@@ -46,6 +46,7 @@ import { HomeLibraryView } from "@/components/home/HomeLibraryView";
 import { HomePlayerView } from "@/components/home/HomePlayerView";
 import { HomeSearchView } from "@/components/home/HomeSearchView";
 import { HomeSettingsView } from "@/components/home/HomeSettingsView";
+import { ActionsErrorBoundary } from "@/components/home/ActionsErrorBoundary";
 import {
   type DspParamConfig,
   type HomeLibraryView as LibraryView,
@@ -97,6 +98,68 @@ const clampDspParams = (params: StreamingParams): StreamingParams => ({
   balance: clampDspParam("balance", params.balance),
   volume: clampDspParam("volume", params.volume),
 });
+
+const MAX_SAFE_DSP_BIT_DEPTH = 24;
+const MAX_SAFE_DSP_SAMPLE_RATE = 192000;
+
+const getAudioCompatibilityUnsupportedReason = (
+  track: Track,
+): string | null => {
+  const bitDepth =
+    typeof track.bitDepth === "number" ? track.bitDepth : undefined;
+  const sampleRate =
+    typeof track.sampleRate === "number" ? track.sampleRate : undefined;
+  const codec = track.codec?.trim().toLowerCase();
+  const extension = track.fileName?.split(".").pop()?.trim().toLowerCase();
+  const safeCodecs = new Set(["lpcm", "alac", "flac", "mp3", "aac", "mp4a"]);
+  const safeExtensions = new Set([
+    "wav",
+    "wave",
+    "aif",
+    "aiff",
+    "aifc",
+    "caf",
+    "flac",
+    "m4a",
+    "mp4",
+    "m4b",
+    "mp3",
+    "aac",
+  ]);
+
+  console.info("[AudioCompat] track metadata", {
+    id: track.id,
+    stableId: track.sourceTrackId,
+    sourceUri: track.sourceUri,
+    audioUrl: track.coverUrl,
+    title: track.title,
+    artist: track.artist,
+    bitDepth,
+    sampleRate,
+    codec,
+    extension,
+    qualityClass: track.qualityClass,
+  });
+
+  if (bitDepth && bitDepth > MAX_SAFE_DSP_BIT_DEPTH) {
+    return `bitDepth ${bitDepth} exceeds ${MAX_SAFE_DSP_BIT_DEPTH}`;
+  }
+
+  if (sampleRate && sampleRate > MAX_SAFE_DSP_SAMPLE_RATE) {
+    return `sampleRate ${sampleRate} exceeds ${MAX_SAFE_DSP_SAMPLE_RATE}`;
+  }
+
+  if (
+    codec &&
+    !safeCodecs.has(codec) &&
+    extension &&
+    !safeExtensions.has(extension)
+  ) {
+    return `unsupported codec/container ${codec}/${extension}`;
+  }
+
+  return null;
+};
 
 export default function Home() {
   const audioProcessor = useIosNativeAudioProcessor();
@@ -213,12 +276,18 @@ export default function Home() {
   }, [queue.library, normalizedGlobalQuery]);
 
   useEffect(() => {
-    const dismissed = localStorage.getItem("epicenter-onboarding-dismissed");
-    const legacyDismissed = localStorage.getItem("epicenter-welcome-dismissed");
-    if (!dismissed && !legacyDismissed) {
-      setShowOnboarding(true);
-    } else if (!dismissed && legacyDismissed) {
-      localStorage.setItem("epicenter-onboarding-dismissed", "true");
+    try {
+      const dismissed = localStorage.getItem("epicenter-onboarding-dismissed");
+      const legacyDismissed = localStorage.getItem(
+        "epicenter-welcome-dismissed",
+      );
+      if (!dismissed && !legacyDismissed) {
+        setShowOnboarding(true);
+      } else if (!dismissed && legacyDismissed) {
+        localStorage.setItem("epicenter-onboarding-dismissed", "true");
+      }
+    } catch (error) {
+      console.warn("[ActionsScreen] onboarding storage unavailable", error);
     }
   }, []);
 
@@ -241,7 +310,11 @@ export default function Home() {
   );
 
   const dismissOnboarding = useCallback(() => {
-    localStorage.setItem("epicenter-onboarding-dismissed", "true");
+    try {
+      localStorage.setItem("epicenter-onboarding-dismissed", "true");
+    } catch (error) {
+      console.warn("[ActionsScreen] onboarding storage write failed", error);
+    }
     setShowOnboarding(false);
     setOnboardingStep(0);
   }, []);
@@ -281,19 +354,59 @@ export default function Home() {
     });
   }, [crossfade.enabled, crossfade.duration, audioProcessor]);
 
+  const handleNextTrack = useCallback(
+    (
+      source:
+        | "media-session"
+        | "notification"
+        | "ui"
+        | "autoplay"
+        | "unsupported-skip" = "ui",
+    ) => {
+      console.info(
+        source === "media-session"
+          ? "[MediaSession] next requested"
+          : "[Queue] next requested",
+        {
+          source,
+          currentIndex: queue.currentTrackIndex,
+          queueLength: queue.queue.length,
+          currentTrackId: queue.currentTrack?.id,
+        },
+      );
+      playbackReasonRef.current =
+        source === "unsupported-skip" ? "unsupported-skip" : "next";
+      queue.nextTrack();
+    },
+    [queue],
+  );
+
+  const handlePreviousTrack = useCallback(
+    (source: "media-session" | "notification" | "ui" = "ui") => {
+      console.info(
+        source === "media-session"
+          ? "[MediaSession] previous requested"
+          : "[Queue] previous requested",
+        {
+          source,
+          currentIndex: queue.currentTrackIndex,
+          queueLength: queue.queue.length,
+          currentTrackId: queue.currentTrack?.id,
+        },
+      );
+      playbackReasonRef.current = "previous";
+      queue.previousTrack();
+    },
+    [queue],
+  );
+
   // Configurar handlers de Media Session y Notificaciones Nativas
   useEffect(() => {
     mediaSession.setHandlers({
       onPlay: () => audioProcessor.play(),
       onPause: () => audioProcessor.pause(),
-      onNextTrack: () => {
-        playbackReasonRef.current = "next";
-        queue.nextTrack();
-      },
-      onPreviousTrack: () => {
-        playbackReasonRef.current = "previous";
-        queue.previousTrack();
-      },
+      onNextTrack: () => handleNextTrack("media-session"),
+      onPreviousTrack: () => handlePreviousTrack("media-session"),
       onSeekTo: (time) => audioProcessor.seek(time),
       onSeekBackward: (offset) => {
         audioProcessor.seek(Math.max(0, audioProcessor.currentTime - offset));
@@ -311,17 +424,17 @@ export default function Home() {
     mediaNotification.setHandlers({
       onPlay: () => audioProcessor.play(),
       onPause: () => audioProcessor.pause(),
-      onNext: () => {
-        playbackReasonRef.current = "next";
-        queue.nextTrack();
-      },
-      onPrevious: () => {
-        playbackReasonRef.current = "previous";
-        queue.previousTrack();
-      },
+      onNext: () => handleNextTrack("notification"),
+      onPrevious: () => handlePreviousTrack("notification"),
       onSeek: (time) => audioProcessor.seek(time),
     });
-  }, [audioProcessor, queue, mediaSession, mediaNotification]);
+  }, [
+    audioProcessor,
+    handleNextTrack,
+    handlePreviousTrack,
+    mediaSession,
+    mediaNotification,
+  ]);
 
   // Actualizar metadatos en Media Session cuando cambia el track
   useEffect(() => {
@@ -391,7 +504,6 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [dspParams, audioProcessor.eqBands]);
 
-
   useEffect(() => {
     currentTrackIdRef.current = queue.currentTrack?.id ?? null;
   }, [queue.currentTrack?.id]);
@@ -409,9 +521,24 @@ export default function Home() {
       queue.queue.find((track) => track.id === nativeTrack.id) ??
       queue.library.find((track) => track.id === nativeTrack.id);
 
+    console.info("[Playback] loaded track", {
+      trackId: nativeTrack.id,
+      stableId: nativeTrack.sourceTrackId,
+      sourceUri: nativeTrack.sourceUri,
+      cachePath: nativeTrack.albumArtUri,
+      audioUrl: nativeTrack.coverUrl,
+      title: nativeTrack.title,
+    });
+    queue.syncCurrentTrackById(nativeTrack.id);
     currentTrackRef.current = nativeTrack.id;
     setNowPlayingTrack({ ...(queuedTrack ?? {}), ...nativeTrack } as Track);
-  }, [audioProcessor.currentTrack, audioProcessor.currentTrackId, queue.library, queue.queue]);
+  }, [
+    audioProcessor.currentTrack,
+    audioProcessor.currentTrackId,
+    queue.library,
+    queue.queue,
+    queue.syncCurrentTrackById,
+  ]);
 
   const clearPendingPlaybackTimers = useCallback(() => {
     if (playTimeoutRef.current !== null) {
@@ -424,22 +551,48 @@ export default function Home() {
     }
   }, []);
 
-
   const requestTrackPlayback = useCallback(
     (requestedTrack: Track, reason: string) => {
       if (!requestedTrack) return;
+
+      const unsupportedReason =
+        getAudioCompatibilityUnsupportedReason(requestedTrack);
+      if (unsupportedReason) {
+        console.warn("[AudioCompat] unsupported reason", {
+          trackId: requestedTrack.id,
+          title: requestedTrack.title,
+          reason: unsupportedReason,
+        });
+        failedQueueTrackIdsRef.current.add(requestedTrack.id);
+        setPendingTrack(null);
+        toast.error(t("actions.unsupportedHiResFormat"));
+        if (
+          queue.queue.length > 1 &&
+          queue.currentTrackIndex < queue.queue.length - 1
+        ) {
+          handleNextTrack("unsupported-skip");
+        }
+        return;
+      }
 
       const requestId = ++trackLoadRequestRef.current;
       clearPendingPlaybackTimers();
       currentTrackRef.current = requestedTrack.id;
       setPendingTrack(requestedTrack);
       setNowPlayingTrack(requestedTrack);
-      console.info("[iOS Native Playback] request", {
-        reason,
-        requestId,
-        trackId: requestedTrack.id,
-        title: requestedTrack.title,
-      });
+      console.info(
+        "[Playback] resolved stableId/sourceUri/cachePath/audioUrl",
+        {
+          reason,
+          requestId,
+          trackId: requestedTrack.id,
+          stableId: requestedTrack.sourceTrackId,
+          sourceUri: requestedTrack.sourceUri,
+          cachePath: requestedTrack.albumArtUri,
+          audioUrl: requestedTrack.coverUrl,
+          title: requestedTrack.title,
+        },
+      );
 
       void audioProcessor.playTrackId(requestedTrack.id).then((played) => {
         if (trackLoadRequestRef.current !== requestId) return;
@@ -450,7 +603,14 @@ export default function Home() {
         }
       });
     },
-    [audioProcessor, clearPendingPlaybackTimers, t],
+    [
+      audioProcessor,
+      clearPendingPlaybackTimers,
+      handleNextTrack,
+      queue.currentTrackIndex,
+      queue.queue.length,
+      t,
+    ],
   );
 
   const playNextAvailableTrackAfterFailure = useCallback(
@@ -489,8 +649,7 @@ export default function Home() {
         queue.queue.length > 0 &&
         queue.currentTrackIndex < queue.queue.length - 1
       ) {
-        playbackReasonRef.current = "autoplay";
-        queue.nextTrack();
+        handleNextTrack("autoplay");
       }
     });
 
@@ -524,6 +683,7 @@ export default function Home() {
   }, [
     audioProcessor,
     clearPendingPlaybackTimers,
+    handleNextTrack,
     playNextAvailableTrackAfterFailure,
     queue,
     t,
@@ -680,8 +840,15 @@ export default function Home() {
   // Agrupar canciones
   const songsByArtist = useMemo(
     () =>
-      queue.library.reduce(
+      (Array.isArray(queue.library) ? queue.library : []).reduce(
         (acc, track) => {
+          if (!track?.id) {
+            console.warn(
+              "[ActionsScreen] skipping invalid artist track",
+              track,
+            );
+            return acc;
+          }
           const artist = track.artist || t("common.unknownArtist");
           if (!acc[artist]) acc[artist] = [];
           acc[artist].push(track);
@@ -694,16 +861,21 @@ export default function Home() {
 
   const albums = useMemo(
     () =>
-      queue.library.reduce(
+      (Array.isArray(queue.library) ? queue.library : []).reduce(
         (acc, track) => {
-          const album = track.title.split(" - ")[0] || track.title;
+          if (!track?.id) {
+            console.warn("[ActionsScreen] skipping invalid album track", track);
+            return acc;
+          }
+          const title = track.title || t("player.noTrack");
+          const album = title.split(" - ")[0] || title;
           if (!acc[album]) acc[album] = [];
           acc[album].push(track);
           return acc;
         },
         {} as Record<string, Track[]>,
       ),
-    [queue.library],
+    [queue.library, t],
   );
 
   // Handlers
@@ -750,9 +922,10 @@ export default function Home() {
       toast.error(t("actions.noSongsToPlay"));
       return;
     }
-    const candidates = tracks.length > 1 && nowPlayingTrack
-      ? tracks.filter((track) => track.id !== nowPlayingTrack.id)
-      : tracks;
+    const candidates =
+      tracks.length > 1 && nowPlayingTrack
+        ? tracks.filter((track) => track.id !== nowPlayingTrack.id)
+        : tracks;
     const randomIndex = Math.floor(Math.random() * candidates.length);
     const randomTrack = candidates[randomIndex] ?? tracks[0];
     console.info("[SHUFFLE_REQUEST]", {
@@ -1088,33 +1261,35 @@ export default function Home() {
 
   return (
     <div className="epicenter-shell min-h-screen flex flex-col bg-black text-white">
-      <TrackContextMenu
-        contextMenu={contextMenu}
-        t={t}
-        onClose={() => setContextMenu(null)}
-        onPlayNow={handlePlayNow}
-        onPlayNext={handlePlayNext}
-        onAddToQueue={handleAddToQueue}
-        onAddToPlaylist={(track) => {
-          setShowAddToPlaylist(track);
-          setContextMenu(null);
-        }}
-      />
+      <ActionsErrorBoundary t={t}>
+        <TrackContextMenu
+          contextMenu={contextMenu}
+          t={t}
+          onClose={() => setContextMenu(null)}
+          onPlayNow={handlePlayNow}
+          onPlayNext={handlePlayNext}
+          onAddToQueue={handleAddToQueue}
+          onAddToPlaylist={(track) => {
+            setShowAddToPlaylist(track);
+            setContextMenu(null);
+          }}
+        />
 
-      <PlaylistContextMenu
-        playlistMenu={playlistMenu}
-        t={t}
-        onClose={() => setPlaylistMenu(null)}
-        onRename={(playlist) => {
-          setSelectedPlaylist(playlist);
-          setNewPlaylistName(playlist.name);
-          setShowRenamePlaylist(true);
-        }}
-        onDelete={(playlist) => {
-          setSelectedPlaylist(playlist);
-          setShowDeletePlaylist(true);
-        }}
-      />
+        <PlaylistContextMenu
+          playlistMenu={playlistMenu}
+          t={t}
+          onClose={() => setPlaylistMenu(null)}
+          onRename={(playlist) => {
+            setSelectedPlaylist(playlist);
+            setNewPlaylistName(playlist.name);
+            setShowRenamePlaylist(true);
+          }}
+          onDelete={(playlist) => {
+            setSelectedPlaylist(playlist);
+            setShowDeletePlaylist(true);
+          }}
+        />
+      </ActionsErrorBoundary>
 
       <PlaylistNameModal
         isOpen={showCreatePlaylist}
@@ -1157,19 +1332,21 @@ export default function Home() {
         onConfirm={handleDeletePlaylist}
       />
 
-      <AddToPlaylistModal
-        track={showAddToPlaylist}
-        playlists={playlistManager.playlists}
-        t={t}
-        onClose={() => setShowAddToPlaylist(null)}
-        onSelect={handleAddToPlaylist}
-      />
+      <ActionsErrorBoundary t={t}>
+        <AddToPlaylistModal
+          track={showAddToPlaylist}
+          playlists={playlistManager.playlists}
+          t={t}
+          onClose={() => setShowAddToPlaylist(null)}
+          onSelect={handleAddToPlaylist}
+        />
 
-      <DuplicatesModal
-        duplicateFileNames={showDuplicatesModal}
-        t={t}
-        onClose={() => setShowDuplicatesModal([])}
-      />
+        <DuplicatesModal
+          duplicateFileNames={showDuplicatesModal}
+          t={t}
+          onClose={() => setShowDuplicatesModal([])}
+        />
+      </ActionsErrorBoundary>
 
       <OnboardingModal
         isOpen={showOnboarding}
@@ -1185,14 +1362,16 @@ export default function Home() {
         }
       />
 
-      <AddSongsToPlaylistModal
-        isOpen={showAddSongsToPlaylist}
-        selectedPlaylist={selectedPlaylist}
-        library={queue.library}
-        t={t}
-        onClose={() => setShowAddSongsToPlaylist(false)}
-        onAddTrack={handleAddSongToSelectedPlaylist}
-      />
+      <ActionsErrorBoundary t={t}>
+        <AddSongsToPlaylistModal
+          isOpen={showAddSongsToPlaylist}
+          selectedPlaylist={selectedPlaylist}
+          library={queue.library}
+          t={t}
+          onClose={() => setShowAddSongsToPlaylist(false)}
+          onAddTrack={handleAddSongToSelectedPlaylist}
+        />
+      </ActionsErrorBoundary>
 
       <HomePlayerView
         isVisible={activeTab === "player"}
@@ -1213,14 +1392,8 @@ export default function Home() {
           },
           removeFromQueue: queue.removeFromQueue,
           reorderQueue: queue.reorderQueue,
-          previousTrack: () => {
-            playbackReasonRef.current = "previous";
-            queue.previousTrack();
-          },
-          nextTrack: () => {
-            playbackReasonRef.current = "next";
-            queue.nextTrack();
-          },
+          previousTrack: () => handlePreviousTrack("ui"),
+          nextTrack: () => handleNextTrack("ui"),
         }}
         audioProcessor={{
           currentTime: audioProcessor.currentTime,
