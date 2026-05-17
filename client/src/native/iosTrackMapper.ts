@@ -10,7 +10,6 @@ export interface IOSAppTrack {
   fileName?: string;
   fileType?: string;
   codec?: string;
-  qualityClass?: string;
   fileSize?: number;
   title: string;
   artist: string;
@@ -21,8 +20,19 @@ export interface IOSAppTrack {
   sampleRate?: number;
   bitrate?: number;
   isHiRes?: boolean;
-  qualityClass?: AudioQualityClass;
+  qualityClass?: string;
   sourceUri?: string;
+  sourceUrl?: string;
+  originalUrl?: string;
+  playbackUrl?: string;
+  optimizedUrl?: string;
+  optimizedForPlayback?: boolean;
+  optimizationStatus?: "pending" | "processing" | "ready" | "failed";
+  optimizationError?: string;
+  originalBitDepth?: number;
+  originalSampleRate?: number;
+  originalBitrate?: number;
+  originalFormat?: string;
   sourceType?: "manual-ios";
   albumArtUri?: string;
   mediaStoreId?: string;
@@ -73,7 +83,12 @@ const numberOrUndefined = (value?: number | null): number | undefined =>
     ? value
     : undefined;
 
-export const nativeTrackToAppTrack = (track: IOSNativeTrack): IOSAppTrack => {
+export const nativeTrackToAppTrack = (
+  track: Partial<IOSNativeTrack> | null | undefined,
+): IOSAppTrack | null => {
+  if (!track || typeof track !== "object") return null;
+  const id = cleanText(track.id);
+  if (!id) return null;
   const fileName = cleanText(track.fileName);
   const title =
     cleanText(track.title)?.replace(COPIED_FILE_UUID_SUFFIX, "").trim() ||
@@ -81,16 +96,27 @@ export const nativeTrackToAppTrack = (track: IOSNativeTrack): IOSAppTrack => {
     "Untitled";
   const artist =
     cleanText(track.artist) || cleanText(track.album) || "Unknown Artist";
-  const sampleRate = numberOrUndefined(track.sampleRate);
-  const bitDepth = numberOrUndefined(track.bitDepth);
-  const bitrate = numberOrUndefined(track.bitrate);
+  const sampleRate = numberOrUndefined(
+    track.originalSampleRate ?? track.sampleRate,
+  );
+  const bitDepth = numberOrUndefined(track.originalBitDepth ?? track.bitDepth);
+  const bitrate = numberOrUndefined(track.originalBitrate ?? track.bitrate);
   const codec = cleanText(track.codec) || cleanText(track.fileExtension);
   const albumArtUri = cleanText(track.albumArtUri);
   const fileExtension = cleanText(track.fileExtension)?.toLowerCase();
-  const isHiRes = isHiResQuality(bitDepth, sampleRate, fileExtension);
+  const originalUrl = cleanText(
+    track.originalUrl ??
+      track.sourceUrl ??
+      track.sourceUri ??
+      track.localFilePath,
+  );
+  const playbackUrl = cleanText(
+    track.playbackUrl ?? track.localFilePath ?? originalUrl ?? track.sourceUri,
+  );
+  const optimizationStatus = track.optimizationStatus ?? "ready";
 
   return {
-    id: track.id,
+    id,
     sourceTrackId: cleanText(track.stableId),
     fileName,
     fileType: track.fileExtension ? `audio/${track.fileExtension}` : undefined,
@@ -107,6 +133,17 @@ export const nativeTrackToAppTrack = (track: IOSNativeTrack): IOSAppTrack => {
     bitrate,
     isHiRes: isHiResQuality(bitDepth, sampleRate, codec, track.fileExtension),
     sourceUri: cleanText(track.sourceUri),
+    sourceUrl: originalUrl,
+    originalUrl,
+    playbackUrl,
+    optimizedUrl: cleanText(track.optimizedUrl),
+    optimizedForPlayback: !!track.optimizedForPlayback,
+    optimizationStatus,
+    optimizationError: cleanText(track.optimizationError),
+    originalBitDepth: bitDepth,
+    originalSampleRate: sampleRate,
+    originalBitrate: bitrate,
+    originalFormat: cleanText(track.originalFormat ?? track.fileExtension),
     sourceType: "manual-ios",
     albumArtUri: albumArtUri ?? undefined,
     unavailable: !track.isAvailable,

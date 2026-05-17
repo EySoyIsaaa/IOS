@@ -1,3 +1,4 @@
+import { Component, type ReactNode } from "react";
 import {
   ChevronRight,
   Disc3,
@@ -25,6 +26,46 @@ import type {
   HomeTrackActions,
   TranslateFn,
 } from "@/components/home/types";
+
+const safeTitle = (track?: Partial<Track> | null): string =>
+  typeof track?.title === "string" && track.title.trim()
+    ? track.title
+    : "Canción desconocida";
+
+const safeArtist = (track?: Partial<Track> | null): string =>
+  typeof track?.artist === "string" && track.artist.trim()
+    ? track.artist
+    : "Artista desconocido";
+
+const isPlayableTrack = (track?: Track | null): track is Track =>
+  Boolean(track?.id);
+
+class SongsLibraryErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: unknown) {
+    console.error("[SongsScreen] render state", { error, info });
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 text-center text-sm text-zinc-400">
+          No se pudo renderizar la lista de canciones. Intenta volver a abrir la
+          biblioteca.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface HomeLibraryViewProps
   extends HomeTrackActions,
@@ -95,6 +136,20 @@ export function HomeLibraryView({
   onRemoveFromPlaylist,
   hiresLogoUrl,
 }: HomeLibraryViewProps) {
+  const safeSortedSongs = Array.isArray(sortedSongs) ? sortedSongs : [];
+  const validSortedSongs = safeSortedSongs.filter((track, index) => {
+    if (!isPlayableTrack(track)) {
+      console.warn("[SongsScreen] invalid track skipped", { index, track });
+      return false;
+    }
+    return true;
+  });
+  const selectedPlaylistTracks = Array.isArray(selectedPlaylist?.tracks)
+    ? selectedPlaylist.tracks.filter((track): track is Track =>
+        Boolean(track?.id),
+      )
+    : [];
+
   return (
     <div
       className="flex-1 flex flex-col home-scroll-with-player"
@@ -429,17 +484,17 @@ export function HomeLibraryView({
               </div>
             </button>
 
-            {selectedPlaylist.tracks.length > 0 && (
+            {selectedPlaylistTracks.length > 0 && (
               <div className="flex flex-wrap items-center gap-3 mb-4">
                 <button
-                  onClick={() => onPlayInOrder(selectedPlaylist.tracks)}
+                  onClick={() => onPlayInOrder(selectedPlaylistTracks)}
                   className="flex items-center gap-2 px-5 py-2 rounded-full bg-[var(--ep-red)] text-white font-semibold shadow-sm"
                 >
                   <Play className="w-4 h-4" fill="currentColor" />
                   {t("actions.play")}
                 </button>
                 <button
-                  onClick={() => onShufflePlay(selectedPlaylist.tracks)}
+                  onClick={() => onShufflePlay(selectedPlaylistTracks)}
                   className="flex items-center gap-2 px-5 py-2 rounded-full border border-[var(--ep-border)] text-white"
                 >
                   <Shuffle className="w-4 h-4" />
@@ -448,7 +503,7 @@ export function HomeLibraryView({
               </div>
             )}
 
-            {selectedPlaylist.tracks.length === 0 ? (
+            {selectedPlaylistTracks.length === 0 ? (
               <div className="text-center py-8">
                 <ListMusic
                   className="w-16 h-16 text-zinc-800 mx-auto mb-4"
@@ -457,119 +512,129 @@ export function HomeLibraryView({
                 <p className="text-zinc-500 mb-2">{t("playlists.empty")}</p>
               </div>
             ) : (
-              selectedPlaylist.tracks.map((track) => (
-                <div
-                  key={track.id}
-                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-900/50 transition-colors"
-                >
+              selectedPlaylistTracks.map((track) => {
+                return (
                   <div
-                    className="flex-1 flex items-center gap-3 min-w-0 cursor-pointer"
-                    onClick={() => onPlayNow(track)}
+                    key={track.id}
+                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-900/50 transition-colors"
                   >
-                    <div className="w-10 h-10 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0">
-                      <TrackArtwork
-                        src={track.coverUrl}
-                        alt={track.title}
-                        iconClassName="w-5 h-5 text-zinc-500"
-                      />
+                    <div
+                      className="flex-1 flex items-center gap-3 min-w-0 cursor-pointer"
+                      onClick={() => onPlayNow(track)}
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0">
+                        <TrackArtwork
+                          src={track.coverUrl}
+                          alt={safeTitle(track)}
+                          iconClassName="w-5 h-5 text-zinc-500"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {safeTitle(track)}
+                        </p>
+                        <p className="text-xs text-zinc-500 truncate">
+                          {safeArtist(track)}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {track.title}
-                      </p>
-                      <p className="text-xs text-zinc-500 truncate">
-                        {track.artist}
-                      </p>
-                    </div>
+                    <button
+                      onClick={() => onRemoveFromPlaylist(track)}
+                      className="p-2 text-zinc-600 hover:text-red-400"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => onRemoveFromPlaylist(track)}
-                    className="p-2 text-zinc-600 hover:text-red-400"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
 
         {libraryView === "songs" && (
-          <div className="p-4 space-y-1">
-            {sortedSongs.length > 0 && (
-              <>
-                <div className="flex flex-wrap items-center gap-3 mb-4">
-                  <button
-                    onClick={() => onPlayInOrder(sortedSongs)}
-                    className="flex items-center gap-2 px-5 py-2 rounded-full bg-[var(--ep-red)] text-white font-semibold shadow-sm"
-                  >
-                    <Play className="w-4 h-4" fill="currentColor" />
-                    {t("actions.play")}
-                  </button>
-                  <button
-                    onClick={() => onShufflePlay(sortedSongs)}
-                    className="flex items-center gap-2 px-5 py-2 rounded-full border border-[var(--ep-border)] text-white"
-                  >
-                    <Shuffle className="w-4 h-4" />
-                    {t("library.shuffle")}
-                  </button>
-                </div>
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="text-xs text-zinc-500">
-                    {t("library.sortBy")}
-                  </span>
-                  {(["default", "name", "artist"] as const).map((sortKey) => (
+          <SongsLibraryErrorBoundary>
+            <div className="p-4 space-y-1">
+              {validSortedSongs.length > 0 && (
+                <>
+                  <div className="flex flex-wrap items-center gap-3 mb-4">
                     <button
-                      key={sortKey}
-                      onClick={() => setSongSort(sortKey)}
-                      className={`px-3 py-1 rounded-full text-xs ${
-                        songSort === sortKey
-                          ? "bg-[var(--ep-red)] text-white"
-                          : "bg-[#0b0b0b] text-[var(--ep-text-secondary)] border border-[var(--ep-border)]"
-                      }`}
+                      onClick={() => onPlayInOrder(validSortedSongs)}
+                      className="flex items-center gap-2 px-5 py-2 rounded-full bg-[var(--ep-red)] text-white font-semibold shadow-sm"
                     >
-                      {sortKey === "default"
-                        ? t("library.sortDefault")
-                        : sortKey === "name"
-                          ? t("library.sortName")
-                          : t("library.sortArtist")}
+                      <Play className="w-4 h-4" fill="currentColor" />
+                      {t("actions.play")}
                     </button>
-                  ))}
+                    <button
+                      onClick={() => onShufflePlay(validSortedSongs)}
+                      className="flex items-center gap-2 px-5 py-2 rounded-full border border-[var(--ep-border)] text-white"
+                    >
+                      <Shuffle className="w-4 h-4" />
+                      {t("library.shuffle")}
+                    </button>
+                  </div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="text-xs text-zinc-500">
+                      {t("library.sortBy")}
+                    </span>
+                    {(["default", "name", "artist"] as const).map((sortKey) => (
+                      <button
+                        key={sortKey}
+                        onClick={() => setSongSort(sortKey)}
+                        className={`px-3 py-1 rounded-full text-xs ${
+                          songSort === sortKey
+                            ? "bg-[var(--ep-red)] text-white"
+                            : "bg-[#0b0b0b] text-[var(--ep-text-secondary)] border border-[var(--ep-border)]"
+                        }`}
+                      >
+                        {sortKey === "default"
+                          ? t("library.sortDefault")
+                          : sortKey === "name"
+                            ? t("library.sortName")
+                            : t("library.sortArtist")}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              {validSortedSongs.length > 0 && (
+                <p className="text-xs text-zinc-600 text-center mb-3 px-4">
+                  {t("library.swipeHint")}
+                </p>
+              )}
+              {validSortedSongs
+                .slice(0, visibleSongsCount)
+                .map((track, index) => (
+                  <SwipeableTrackItem
+                    key={
+                      track.id ||
+                      track.sourceTrackId ||
+                      `${safeTitle(track)}-${index}`
+                    }
+                    track={track}
+                    onPlayNow={onPlayNow}
+                    onAddToQueue={onAddToQueue}
+                    onPlayNext={onPlayNext}
+                    onAddToPlaylist={onOpenAddToPlaylist}
+                    onPersistTrack={onPersistEphemeralTrack}
+                  />
+                ))}
+              {visibleSongsCount < validSortedSongs.length && (
+                <div className="py-4 text-center">
+                  <button
+                    onClick={() => setVisibleSongsCount((prev) => prev + 250)}
+                    className="px-4 py-2 rounded-full bg-zinc-900 text-zinc-200 text-sm"
+                  >
+                    {t("library.loadMoreSongs", {
+                      count: Math.min(
+                        250,
+                        validSortedSongs.length - visibleSongsCount,
+                      ),
+                    })}
+                  </button>
                 </div>
-              </>
-            )}
-            {sortedSongs.length > 0 && (
-              <p className="text-xs text-zinc-600 text-center mb-3 px-4">
-                {t("library.swipeHint")}
-              </p>
-            )}
-            {sortedSongs.slice(0, visibleSongsCount).map((track) => (
-              <SwipeableTrackItem
-                key={track.id}
-                track={track}
-                onPlayNow={onPlayNow}
-                onAddToQueue={onAddToQueue}
-                onPlayNext={onPlayNext}
-                onAddToPlaylist={onOpenAddToPlaylist}
-                onPersistTrack={onPersistEphemeralTrack}
-              />
-            ))}
-            {visibleSongsCount < sortedSongs.length && (
-              <div className="py-4 text-center">
-                <button
-                  onClick={() => setVisibleSongsCount((prev) => prev + 250)}
-                  className="px-4 py-2 rounded-full bg-zinc-900 text-zinc-200 text-sm"
-                >
-                  {t("library.loadMoreSongs", {
-                    count: Math.min(
-                      250,
-                      sortedSongs.length - visibleSongsCount,
-                    ),
-                  })}
-                </button>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          </SongsLibraryErrorBoundary>
         )}
 
         {libraryView === "hires" && (

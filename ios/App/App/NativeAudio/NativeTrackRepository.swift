@@ -23,6 +23,9 @@ final class NativeTrackRepository {
         if let previousArtworkPath = previousTrack.albumArtUri, previousArtworkPath != savedTrack.albumArtUri {
             try? FileManager.default.removeItem(atPath: previousArtworkPath)
         }
+        if let previousOptimizedPath = previousTrack.optimizedUrl, previousOptimizedPath != savedTrack.optimizedUrl {
+            try? FileManager.default.removeItem(atPath: previousOptimizedPath)
+        }
     }
 
     func getLibraryPage(offset: Int, limit: Int, search: String?, sort: String?) -> [String: Any] {
@@ -60,6 +63,10 @@ final class NativeTrackRepository {
 
         if let albumArtUri = track.albumArtUri, FileManager.default.fileExists(atPath: albumArtUri) {
             try? FileManager.default.removeItem(atPath: albumArtUri)
+        }
+
+        if let optimizedUrl = track.optimizedUrl, FileManager.default.fileExists(atPath: optimizedUrl) {
+            try? FileManager.default.removeItem(atPath: optimizedUrl)
         }
 
         return [
