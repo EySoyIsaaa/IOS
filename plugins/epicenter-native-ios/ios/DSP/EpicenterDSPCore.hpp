@@ -21,7 +21,7 @@ struct EpicenterDSPCalibration {
     float synthDepthGain = 1.18f;
     float gateDetectorFloor = 0.40f;
     float gateDetectorAuthority = 0.22f;
-    float outputDcHighpassHz = 27.0f;
+    float outputDcHighpassHz = 26.0f;
     float deepExtensionSubsonicHighpassHz = 23.0f;
     float deepExtensionMixBase = 0.46f;
     float deepExtensionMixVoice = 0.58f;

@@ -1,67 +1,79 @@
 export const HI_RES_MIN_BIT_DEPTH = 24;
 export const HI_RES_MIN_SAMPLE_RATE = 48000;
-export const HI_RES_UNKNOWN_DEPTH_SAMPLE_RATE = 88200;
+export const HI_RES_FALLBACK_SAMPLE_RATE = 88200;
+export const CD_QUALITY_BIT_DEPTH = 16;
+export const CD_QUALITY_SAMPLE_RATE = 44100;
 
-const LOSSLESS_EXTENSIONS = new Set(['wav', 'wave', 'aif', 'aiff', 'flac', 'alac', 'caf']);
-const LOSSY_EXTENSIONS = new Set(['mp3', 'aac', 'm4a', 'm4b', 'ogg', 'opus']);
+const LOSSLESS_EXTENSIONS = new Set(['wav', 'wave', 'aif', 'aiff', 'aifc', 'flac', 'alac', 'caf']);
+const LOSSLESS_CODECS = new Set(['lpcm', 'alac', 'flac']);
+const LOSSY_EXTENSIONS = new Set(['mp3', 'aac', 'm4a', 'mp4', 'm4b', 'ogg', 'opus']);
+const LOSSY_CODECS = new Set(['mp3', 'aac', 'mp4a', 'opus', 'vorbis']);
 
-const normalizeExtension = (fileExtension?: string | null): string | undefined => {
-  if (typeof fileExtension !== 'string') return undefined;
-  const clean = fileExtension.trim().toLowerCase().replace(/^\./, '');
-  return clean || undefined;
+const normalizeToken = (value?: string | null): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase().replace(/^\./, '');
+  return normalized || undefined;
 };
 
-export function isLosslessContainer(fileExtension?: string | null): boolean {
-  const extension = normalizeExtension(fileExtension);
-  return extension ? LOSSLESS_EXTENSIONS.has(extension) : false;
+export function isLosslessAudioFormat(codecOrExtension?: string | null, fileExtension?: string | null): boolean {
+  const tokens = [normalizeToken(codecOrExtension), normalizeToken(fileExtension)].filter(Boolean) as string[];
+  return tokens.some((token) => LOSSLESS_CODECS.has(token) || LOSSLESS_EXTENSIONS.has(token));
 }
 
-export function isLossyContainer(fileExtension?: string | null): boolean {
-  const extension = normalizeExtension(fileExtension);
-  return extension ? LOSSY_EXTENSIONS.has(extension) : false;
+export function isLossyAudioFormat(codecOrExtension?: string | null, fileExtension?: string | null): boolean {
+  const codec = normalizeToken(codecOrExtension);
+  if (codec && LOSSLESS_CODECS.has(codec)) return false;
+  if (codec && LOSSY_CODECS.has(codec)) return true;
+
+  const extension = normalizeToken(fileExtension);
+  return !!extension && LOSSY_EXTENSIONS.has(extension);
 }
 
-export function isHiResQuality(bitDepth?: number, sampleRate?: number, fileExtension?: string | null): boolean {
-  if (typeof sampleRate !== "number" || !Number.isFinite(sampleRate) || sampleRate <= 0) {
+export function isHiResQuality(
+  bitDepth?: number,
+  sampleRate?: number,
+  codecOrExtension?: string | null,
+  fileExtension?: string | null,
+): boolean {
+  if (typeof sampleRate !== 'number' || !Number.isFinite(sampleRate) || sampleRate <= 0) {
     return false;
   }
 
-  if (typeof bitDepth === "number" && Number.isFinite(bitDepth) && bitDepth > 0) {
+  if (typeof bitDepth === 'number' && Number.isFinite(bitDepth) && bitDepth > 0) {
     return bitDepth >= HI_RES_MIN_BIT_DEPTH && sampleRate >= HI_RES_MIN_SAMPLE_RATE;
   }
 
-  return sampleRate >= HI_RES_UNKNOWN_DEPTH_SAMPLE_RATE && isLosslessContainer(fileExtension);
+  if (sampleRate < HI_RES_FALLBACK_SAMPLE_RATE) {
+    return false;
+  }
+
+  const codec = normalizeToken(codecOrExtension);
+  const hasLosslessCodec = !!codec && LOSSLESS_CODECS.has(codec);
+  const hasLossyCodec = !!codec && LOSSY_CODECS.has(codec);
+  if (hasLossyCodec) return false;
+  if (hasLosslessCodec) return true;
+
+  return isLosslessAudioFormat(undefined, fileExtension) && !isLossyAudioFormat(undefined, fileExtension);
 }
 
-export type AudioQualityClass = 'hi-res' | 'cd' | 'lossless' | 'lossy' | 'standard' | 'unknown';
+export function isCdQuality(bitDepth?: number, sampleRate?: number): boolean {
+  return bitDepth === CD_QUALITY_BIT_DEPTH && sampleRate === CD_QUALITY_SAMPLE_RATE;
+}
 
-export function classifyAudioQuality(
+export function qualityTier(
   bitDepth?: number,
   sampleRate?: number,
   bitrate?: number,
+  codecOrExtension?: string | null,
   fileExtension?: string | null,
-): AudioQualityClass {
-  if (isHiResQuality(bitDepth, sampleRate, fileExtension)) return 'hi-res';
-
-  const hasBitDepth = typeof bitDepth === 'number' && Number.isFinite(bitDepth) && bitDepth > 0;
-  const hasSampleRate = typeof sampleRate === 'number' && Number.isFinite(sampleRate) && sampleRate > 0;
-
-  if (hasBitDepth && hasSampleRate && bitDepth === 16 && sampleRate === 44100) return 'cd';
-  if (isLossyContainer(fileExtension)) return 'lossy';
-  if (isLosslessContainer(fileExtension) && (hasBitDepth || hasSampleRate)) return 'lossless';
-  if (hasBitDepth || hasSampleRate || (typeof bitrate === 'number' && bitrate > 0)) return 'standard';
+): 'hi-res' | 'studio' | 'cd' | 'lossless' | 'lossy' | 'standard' | 'unknown' {
+  if ((bitDepth ?? 0) >= 32 && (sampleRate ?? 0) >= HI_RES_MIN_SAMPLE_RATE && isLosslessAudioFormat(codecOrExtension, fileExtension)) return 'studio';
+  if (isHiResQuality(bitDepth, sampleRate, codecOrExtension, fileExtension)) return 'hi-res';
+  if (isCdQuality(bitDepth, sampleRate)) return 'cd';
+  if (isLosslessAudioFormat(codecOrExtension, fileExtension)) return 'lossless';
+  if (isLossyAudioFormat(codecOrExtension, fileExtension) || (typeof bitrate === 'number' && bitrate > 0 && !bitDepth)) return 'lossy';
+  if (bitDepth || sampleRate || bitrate) return 'standard';
   return 'unknown';
-}
-
-export function qualityClassLabel(qualityClass: AudioQualityClass): string {
-  switch (qualityClass) {
-    case 'hi-res': return 'HI-RES';
-    case 'cd': return 'CD QUALITY';
-    case 'lossless': return 'LOSSLESS';
-    case 'lossy': return 'LOSSY';
-    case 'standard': return 'STANDARD';
-    case 'unknown': return 'UNKNOWN';
-  }
 }
 
 export function formatQualityLabel(bitDepth?: number, sampleRate?: number): string {

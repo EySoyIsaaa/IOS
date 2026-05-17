@@ -11,7 +11,8 @@ export interface IOSNativeTrack {
   durationMs: number;
   fileName: string;
   fileExtension: string;
-  qualityClass?: 'hi-res' | 'cd' | 'lossless' | 'lossy' | 'standard' | 'unknown';
+  codec?: string | null;
+  qualityClass?: string | null;
   sourceUri: string;
   bookmarkData?: string | null;
   localFilePath?: string | null;

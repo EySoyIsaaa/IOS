@@ -2,13 +2,14 @@
  * EpicenterDSP 7.0 - hardware-style audio quality badges.
  */
 
-import { classifyAudioQuality, formatQualityLabel, isHiResQuality, qualityClassLabel } from "@shared/audioQuality";
+import { formatQualityLabel, isHiResQuality, qualityTier } from "@shared/audioQuality";
 
 interface AudioQualityBadgeProps {
   bitDepth?: number;
   sampleRate?: number;
   bitrate?: number;
   isHiRes?: boolean;
+  codec?: string;
   fileExtension?: string;
   compact?: boolean;
   hiResLogoUrl?: string;
@@ -19,13 +20,14 @@ export function AudioQualityBadge({
   sampleRate,
   bitrate,
   isHiRes,
+  codec,
   fileExtension,
   compact = false,
   hiResLogoUrl,
 }: AudioQualityBadgeProps) {
-  const detectedHiRes = isHiResQuality(bitDepth, sampleRate, fileExtension);
+  const detectedHiRes = isHiResQuality(bitDepth, sampleRate, codec, fileExtension);
   const isHighRes = typeof isHiRes === "boolean" ? isHiRes : detectedHiRes;
-  const qualityClass = isHighRes ? 'hi-res' : classifyAudioQuality(bitDepth, sampleRate, bitrate, fileExtension);
+  const tier = qualityTier(bitDepth, sampleRate, bitrate, codec, fileExtension);
   const parts = [formatQualityLabel(bitDepth, sampleRate)].filter(Boolean);
 
   if (typeof bitrate === "number" && bitrate > 0) {
@@ -65,7 +67,7 @@ export function AudioQualityBadge({
         </span>
       ) : (
         <span className="quality-chip rounded-md px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em]">
-          {qualityClassLabel(qualityClass)}
+          {tier === "studio" ? "STUDIO" : isHighRes ? "HI-RES" : tier === "cd" ? "CD QUALITY" : tier === "lossless" ? "LOSSLESS" : tier === "lossy" ? "COMPRESSED" : "STANDARD"}
         </span>
       )}
       {chips.map((chip) => (

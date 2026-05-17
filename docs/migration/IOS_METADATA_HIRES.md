@@ -1,70 +1,78 @@
-# iOS Metadata Hi-Res
+# iOS Metadata + Hi-Res
 
 ## Objetivo
 
-La app iOS normaliza metadatos técnicos desde la importación nativa para que biblioteca, player, mini-player, badges y `currentTrack` usen los mismos datos de calidad que llegan desde el plugin nativo.
+La biblioteca iOS normaliza los metadatos técnicos importados para que player, mini-player, biblioteca, badges y Now Playing trabajen con el mismo `NativeTrack`.
 
-## Extracción nativa
+## Extracción nativa robusta
 
-`NativeTrackImporter` copia el archivo al sandbox y extrae:
+`NativeTrackImporter` lee los metadatos después de copiar el archivo al sandbox de la app:
 
-- `sampleRate`
-- `bitDepth`
-- `bitrate`
-- `channelCount`
-- `durationMs`
-- `fileExtension`
-- título/artista/álbum/artwork desde `AVAsset.commonMetadata`
+- título, artista, álbum y artwork desde `asset.commonMetadata`, `asset.metadata` y todos los `asset.availableMetadataFormats` disponibles (ID3, iTunes, QuickTime, ISO user data u otros formatos que AVFoundation exponga);
+- fallback de título desde el nombre original seleccionado por el usuario, sin el UUID del sandbox;
+- duración desde `asset.duration`;
+- sample rate, bit depth, channel count y codec primero desde `AVAudioFile.fileFormat.streamDescription` y luego desde `AVAssetTrack.formatDescriptions` como fallback;
+- bitrate estimado como `sizeBytes * 8 / durationSeconds` cuando la duración es válida.
 
-La lectura técnica ahora usa dos rutas:
+La lectura de `formatDescriptions` evita `as?`/`as!` problemáticos: valida `CFGetTypeID(...) == CMAudioFormatDescriptionGetTypeID()`, usa `unsafeBitCast` solo después de esa validación y verifica `kCMMediaType_Audio` antes de pedir el `AudioStreamBasicDescription`.
 
-1. `AVAudioFile.fileFormat.streamDescription` como fuente preferida para formatos PCM/lossless.
-2. `AVAssetTrack.formatDescriptions` como fallback.
+## Artwork
 
-El bitrate se estima con tamaño/duración cuando AVFoundation no lo expone de forma directa.
+El artwork embebido se valida antes de guardarse:
 
-## Logs temporales de importación
+- `Data` no vacía;
+- `UIImage(data:)` debe decodificar correctamente;
+- se guarda como `.png` si la firma PNG coincide, o como `.jpg` vía `jpegData(compressionQuality:)`;
+- si no decodifica, se omite sin crashear.
 
-Durante importación se emiten logs fuera del callback de audio:
+`nativeTrackToAppTrack` sigue convirtiendo `albumArtUri` con `Capacitor.convertFileSrc(...)` para que el WebView pueda mostrar carátulas locales.
+
+## Logs temporales fuera del callback de audio
 
 ```text
-[iOS Metadata] title=...
+[iOS Metadata] title resolved=...
+[iOS Metadata] artist resolved=...
+[iOS Metadata] album resolved=...
+[iOS Metadata] artwork found=...
+[iOS Metadata] artwork bytes=...
 [iOS Metadata] sampleRate=...
 [iOS Metadata] bitDepth=...
 [iOS Metadata] bitrate=...
-[iOS Metadata] channelCount=...
+[iOS Metadata] codec=...
 [iOS Metadata] isHiRes=...
 ```
 
 ## Criterios Hi-Res finales
 
-Una pista es Hi-Res si:
+Una pista se marca como Hi-Res solo si cumple uno de estos casos:
 
-- `bitDepth >= 24` y `sampleRate >= 48000`; o
-- `bitDepth` es desconocido, `sampleRate >= 88200` y el contenedor es claramente lossless (`wav`, `wave`, `aif`, `aiff`, `flac`, `alac`, `caf`).
+1. `bitDepth >= 24` y `sampleRate >= 48000`.
+2. `bitDepth` desconocido, `sampleRate >= 88200` y formato lossless real (`lpcm`, `alac`, `flac`, `wav`, `aiff`, `caf`).
+3. `bitDepth >= 32`, `sampleRate >= 48000` y formato lossless/LPCM se clasifica como `studio` y también cuenta como material Hi-Res para badges de alta resolución.
 
-No se marca como Hi-Res si:
+No se marca como Hi-Res:
 
-- es `16-bit / 44.1 kHz`;
-- es `16-bit / 48 kHz`;
-- es MP3/AAC/M4A común aunque tenga bitrate alto;
-- falta `bitDepth` y el contenedor no es lossless conocido.
+- 16-bit / 44.1 kHz;
+- 16-bit / 48 kHz;
+- MP3/AAC/M4A común solo por bitrate alto;
+- tracks sin bitDepth real salvo que tengan sample rate claramente Hi-Res y formato lossless.
 
-## Clases visuales
+## Quality class
 
-El frontend clasifica como:
+`qualityClass` se persiste desde nativo y el frontend también puede recalcular tiers:
 
-- `hi-res`: muestra logo/badge Hi-Res.
-- `cd`: `16-bit / 44.1 kHz`.
-- `lossless`: contenedor lossless con datos técnicos, pero sin cumplir Hi-Res.
-- `lossy`: MP3/AAC/M4A/OGG/Opus.
-- `standard`: datos parciales no Hi-Res.
+- `studio`: 32-bit/float o superior, sample rate >= 48 kHz y formato lossless/LPCM;
+- `hi-res`: 24-bit o superior a >= 48 kHz, o fallback lossless >= 88.2 kHz sin bit depth;
+- `cd`: 16-bit / 44.1 kHz;
+- `lossless`: formato lossless que no llega a Hi-Res/CD;
+- `lossy`: MP3/AAC/formatos comprimidos o bitrate estimado sin bit depth;
+- `standard`: metadatos válidos que no entran en los grupos anteriores;
 - `unknown`: sin datos técnicos confiables.
 
-## Artwork y nombres
+## Persistencia
 
-`nativeTrackToAppTrack` sigue limpiando el sufijo UUID de copias del sandbox para títulos de fallback y convierte artwork local con `Capacitor.convertFileSrc`, por lo que la WebView puede mostrar carátulas locales.
+La tabla SQLite agrega `codec TEXT` y `quality_class TEXT`. En bases existentes se ejecutan migraciones `ALTER TABLE`; si la columna ya existe se ignora el error de duplicado.
 
 ## Limitaciones
 
-AVFoundation no siempre entrega `bitDepth` para formatos comprimidos o algunos contenedores. En esos casos no se inventa bit depth. El fallback por sample rate alto solo aplica a contenedores lossless conocidos para evitar falsos positivos en MP3/AAC.
+AVAsset no siempre expone bit depth en formatos comprimidos o algunos contenedores. Por seguridad, esos casos no se promueven a Hi-Res a menos que el sample rate sea >= 88.2 kHz y el formato lossless esté identificado.

@@ -248,6 +248,9 @@ final class NativePlaybackController {
             emit("playbackStateChanged", state)
             startProgressTimerIfNeeded()
             return state
+        } catch let error as NativeAudioEngine.EngineError {
+            stopProgressTimer()
+            return playbackErrorResponse(code: error.errorCode, message: error.localizedDescription, trackId: requestedTrackId)
         } catch {
             stopProgressTimer()
             return playbackErrorResponse(code: "play_failed", message: error.localizedDescription, trackId: requestedTrackId)

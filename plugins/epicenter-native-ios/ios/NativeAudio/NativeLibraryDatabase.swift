@@ -50,8 +50,8 @@ final class NativeLibraryDatabase {
                 id, stable_id, title, artist, album, duration_ms, file_name, file_extension,
                 source_uri, bookmark_data, local_file_path, source_type, added_at, updated_at,
                 size_bytes, sample_rate, bit_depth, bitrate, channel_count, album_art_uri,
-                is_available, play_count, last_played_at, codec
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                is_available, play_count, last_played_at, codec, quality_class
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(stable_id) DO UPDATE SET
                 title = excluded.title,
                 artist = excluded.artist,
@@ -60,6 +60,7 @@ final class NativeLibraryDatabase {
                 file_name = excluded.file_name,
                 file_extension = excluded.file_extension,
                 codec = excluded.codec,
+                quality_class = excluded.quality_class,
                 source_uri = excluded.source_uri,
                 bookmark_data = excluded.bookmark_data,
                 local_file_path = excluded.local_file_path,
@@ -199,7 +200,8 @@ final class NativeLibraryDatabase {
             is_available INTEGER NOT NULL DEFAULT 1,
             play_count INTEGER NOT NULL DEFAULT 0,
             last_played_at TEXT,
-            codec TEXT
+            codec TEXT,
+            quality_class TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_tracks_title ON tracks(title COLLATE NOCASE);
         CREATE INDEX IF NOT EXISTS idx_tracks_artist ON tracks(artist COLLATE NOCASE);
@@ -207,6 +209,7 @@ final class NativeLibraryDatabase {
         CREATE INDEX IF NOT EXISTS idx_tracks_added_at ON tracks(added_at);
         CREATE INDEX IF NOT EXISTS idx_tracks_updated_at ON tracks(updated_at);
         ALTER TABLE tracks ADD COLUMN codec TEXT;
+        ALTER TABLE tracks ADD COLUMN quality_class TEXT;
         """
         let statements = sql
             .split(separator: ";")
@@ -255,6 +258,7 @@ final class NativeLibraryDatabase {
         sqlite3_bind_int(statement, 22, Int32(track.playCount))
         bindNullableText(track.lastPlayedAt.map { NativeTrack.dateFormatter.string(from: $0) }, to: statement, at: 23)
         bindNullableText(track.codec, to: statement, at: 24)
+        bindNullableText(track.qualityClass, to: statement, at: 25)
     }
 
     private func bindSearch(_ value: String, to statement: OpaquePointer?) {
@@ -320,6 +324,7 @@ final class NativeLibraryDatabase {
             fileName: text(statement, 6) ?? "",
             fileExtension: text(statement, 7) ?? "",
             codec: text(statement, 23),
+            qualityClass: text(statement, 24),
             sourceUri: text(statement, 8) ?? "",
             bookmarkData: data(statement, 9),
             localFilePath: text(statement, 10),

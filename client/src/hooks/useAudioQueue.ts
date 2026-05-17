@@ -18,6 +18,7 @@ export interface Track extends IOSAppTrack {
   fileName?: string;
   fileType?: string;
   codec?: string;
+  qualityClass?: string;
   fileSize?: number;
   title: string;
   artist: string;

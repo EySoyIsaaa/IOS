@@ -8,6 +8,10 @@ final class NativeAudioEngine {
         case noLoadedTrack
         case noPlayableFrames
         case invalidAudioFile(String)
+        case fileTooLarge(String)
+        case bufferAllocationFailed(String)
+        case decodeFailed(String)
+        case audioFormatError(String)
 
         var errorDescription: String? {
             switch self {
@@ -19,8 +23,33 @@ final class NativeAudioEngine {
                 return "No track is loaded"
             case .noPlayableFrames:
                 return "No playable audio frames remain for the loaded track"
-            case .invalidAudioFile(let message):
+            case .invalidAudioFile(let message),
+                 .fileTooLarge(let message),
+                 .bufferAllocationFailed(let message),
+                 .decodeFailed(let message),
+                 .audioFormatError(let message):
                 return message
+            }
+        }
+
+        var errorCode: String {
+            switch self {
+            case .missingLocalFilePath, .fileUnavailable:
+                return "file_unavailable"
+            case .noLoadedTrack:
+                return "no_loaded_track"
+            case .noPlayableFrames:
+                return "no_playable_frames"
+            case .invalidAudioFile:
+                return "unsupported_format"
+            case .fileTooLarge:
+                return "file_too_large"
+            case .bufferAllocationFailed:
+                return "buffer_allocation_failed"
+            case .decodeFailed:
+                return "decode_failed"
+            case .audioFormatError:
+                return "audio_format_error"
             }
         }
     }
@@ -31,9 +60,10 @@ final class NativeAudioEngine {
         12500, 16000, 20000,
     ]
     private static let eqGainRange: ClosedRange<Float> = -8...8
-    private static let maxHeadroomDb: Float = 12
+    private static let maxHeadroomDb: Float = 10
     private static let maxNativeReverbWetDryMix: Float = 55
     private static let maxConcertHallWetDryMix: Float = 45
+    private static let maxFullBufferMemoryBytes: Int64 = 512 * 1024 * 1024
 
     var onTrackFinished: ((NativeTrack) -> Void)?
 
@@ -105,10 +135,33 @@ final class NativeAudioEngine {
                 commonFormat: .pcmFormatFloat32,
                 interleaved: false
             )
-            guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)) else {
-                throw EngineError.invalidAudioFile("Unable to allocate decoded audio buffer")
+            guard file.processingFormat.sampleRate > 0, file.processingFormat.channelCount > 0 else {
+                throw EngineError.audioFormatError("Audio format is missing sample rate or channel count")
             }
-            try file.read(into: buffer)
+            let estimatedMemoryBytes = estimatedDecodedMemoryBytes(for: file)
+            let estimatedMemoryMB = Double(estimatedMemoryBytes) / 1024.0 / 1024.0
+            print("[iOS Audio] file sampleRate=\(file.processingFormat.sampleRate)")
+            print("[iOS Audio] channels=\(file.processingFormat.channelCount)")
+            print("[iOS Audio] estimatedMemoryMB=\(String(format: "%.1f", estimatedMemoryMB))")
+            print("[iOS Audio] strategy=full-buffer")
+            guard file.length > 0 else {
+                throw EngineError.noPlayableFrames
+            }
+            guard file.length <= AVAudioFramePosition(UInt32.max) else {
+                throw EngineError.fileTooLarge("Audio file has too many frames for a single decoded buffer")
+            }
+            guard estimatedMemoryBytes <= NativeAudioEngine.maxFullBufferMemoryBytes else {
+                throw EngineError.fileTooLarge("Audio file requires \(String(format: "%.1f", estimatedMemoryMB)) MB decoded; limit is \(NativeAudioEngine.maxFullBufferMemoryBytes / 1024 / 1024) MB")
+            }
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)) else {
+                throw EngineError.bufferAllocationFailed("Unable to allocate decoded audio buffer")
+            }
+            do {
+                try file.read(into: buffer)
+            } catch {
+                print("[iOS Audio] decode failed=\(error.localizedDescription)")
+                throw EngineError.decodeFailed(error.localizedDescription)
+            }
             audioFile = file
             audioBuffer = buffer
             audioFormat = file.processingFormat
@@ -342,9 +395,7 @@ final class NativeAudioEngine {
         let maxBoost = positiveGains.max() ?? 0
         let averageBoost = positiveGains.reduce(0, +) / Float(positiveGains.count)
         let density = Float(positiveGains.count) / Float(eqGains.count)
-        let normalizedMaxBoost = maxBoost / NativeAudioEngine.eqGainRange.upperBound
-        let trim = (maxBoost * 0.45) + (averageBoost * density * 0.35) + (normalizedMaxBoost * 0.6)
-        return min(7.0, trim)
+        return min(8.0, (maxBoost * 0.45) + (averageBoost * density * 0.35))
     }
 
     private func eqState(extra: [String: Any] = [:]) -> [String: Any] {
@@ -418,7 +469,7 @@ final class NativeAudioEngine {
                 guard let destination = output[channel].mData?.assumingMemoryBound(to: Float.self) else { continue }
                 let sourceIndex = min(channel, max(0, sourceChannelCount - 1))
                 let source = sourceChannels[sourceIndex].advanced(by: startIndex)
-                destination.assign(from: source, count: Int(framesToCopy))
+                destination.update(from: source, count: Int(framesToCopy))
                 if channel == 0 { leftPointer = destination }
                 if channel == 1 { rightPointer = destination }
             }
@@ -442,6 +493,12 @@ final class NativeAudioEngine {
         epicenterDSP.prepare(withSampleRate: format.sampleRate, channelCount: Int(format.channelCount), maxFrames: 8192)
         print("[iOS Epicenter DSP] prepared sampleRate=\(format.sampleRate) channels=\(format.channelCount)")
         print("[iOS Epicenter DSP] depth calibration constants \(epicenterDSP.calibrationDictionary())")
+    }
+
+    private func estimatedDecodedMemoryBytes(for file: AVAudioFile) -> Int64 {
+        let channels = max(Int64(file.processingFormat.channelCount), 1)
+        let bytesPerSample = Int64(MemoryLayout<Float>.size)
+        return max(file.length, 0) * channels * bytesPerSample
     }
 
     private func scheduleSegment(from frame: AVAudioFramePosition) throws -> Bool {

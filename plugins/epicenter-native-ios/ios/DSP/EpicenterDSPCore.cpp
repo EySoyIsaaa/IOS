@@ -15,7 +15,7 @@ constexpr float DEEP_EXTENSION_AMOUNT = 0.36f;
 constexpr float SYNTH_DEPTH_GAIN = 1.18f;
 constexpr float GATE_DETECTOR_FLOOR = 0.40f;
 constexpr float GATE_DETECTOR_AUTHORITY = 0.22f;
-constexpr float OUTPUT_DC_HIGHPASS_HZ = 27.0f;
+constexpr float OUTPUT_DC_HIGHPASS_HZ = 26.0f;
 constexpr float DEEP_EXTENSION_SUBSONIC_HIGHPASS_HZ = 23.0f;
 constexpr float DEEP_EXTENSION_MIX_BASE = 0.46f;
 constexpr float DEEP_EXTENSION_MIX_VOICE = 0.58f;
@@ -248,15 +248,15 @@ float EpicenterDSPCore::computeGate(float monoEnv, float diffEnv, float weighted
 void EpicenterDSPCore::processChunk(float* const* input, int channelCount, std::size_t blockSize, const EpicenterDSPParameters& p) {
     ensureState(channelCount, p.sweepFreq, p.width);
     const float intensityRawNorm = clampf(p.intensity, 0, 100) / 100.0f;
-    const float intensityShapedNorm = std::pow(intensityRawNorm, 0.85f);
-    const float intensityScaledNorm = intensityShapedNorm * EPICENTER_INTENSITY_MAX_SCALE;
+    const float intensityProgress = std::pow(intensityRawNorm, 0.82f);
+    const float intensityScaledNorm = intensityProgress * EPICENTER_INTENSITY_MAX_SCALE;
     const float intensityNorm = intensityScaledNorm * EPICENTER_INTENSITY_HEADROOM;
     const float balanceNorm = clampf(p.balance, 0, 100) / 100.0f;
     const float widthNorm = clampf(p.width, 0, 100) / 100.0f;
     const float volumeGain = clampf((p.volume / 100.0f) * EPICENTER_VOLUME_MAX_SCALE, 0, 1);
     const float bassBoostFreqHz = 48 + widthNorm * 8;
     const float bassBoostGainDb = intensityScaledNorm * 7.4f;
-    const float synthAmount = (0.44f + intensityNorm * 1.24f) * 1.15f * SYNTH_DEPTH_GAIN;
+    const float synthAmount = (0.45f + intensityNorm * 1.24f) * 1.16f * SYNTH_DEPTH_GAIN;
     const float bassProgramAmount = 0.58f + balanceNorm * 0.26f;
     const float lowMidBodyAmount = 0.12f + balanceNorm * 0.08f;
     const float lowMidDipAmount = (0.08f + intensityNorm * 0.16f) * (0.45f + widthNorm * 0.3f);
@@ -281,10 +281,10 @@ void EpicenterDSPCore::processChunk(float* const* input, int channelCount, std::
         if (gateTarget > 0.3f) monoState_.holdSamples = gateHoldSamples; else if (monoState_.holdSamples > 0) monoState_.holdSamples--;
         const float remixGate = std::max(gateValue, (monoState_.holdSamples > 0 ? 1.0f : 0.0f) * 0.45f);
         const float leveledSynth = monoState_.synthLevelEnv.process(synth) * (synth < 0 ? -1.0f : 1.0f);
-        const float protectedSynth = softClip((synth * 0.65f + leveledSynth * 0.35f) * 1.98f) * 0.73f;
+        const float protectedSynth = softClip((synth * 0.64f + leveledSynth * 0.36f) * 1.98f) * 0.71f;
         subBuffer_[i] = denormalFloor(protectedSynth * synthAmount * remixGate);
     }
-    const float deepExtensionAmount = DEEP_EXTENSION_AMOUNT * intensityShapedNorm * (0.74f + intensityScaledNorm * 0.26f);
+    const float deepExtensionAmount = DEEP_EXTENSION_AMOUNT * intensityProgress * (0.74f + intensityScaledNorm * 0.26f);
     for (std::size_t i = 0; i < blockSize; ++i) {
         const float deepLow = monoState_.deepExtensionLowpass.process(subBuffer_[i]);
         const float deepProtected = monoState_.deepExtensionSubsonicHighpass.process(deepLow);

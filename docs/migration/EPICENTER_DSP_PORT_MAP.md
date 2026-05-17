@@ -78,19 +78,18 @@ Cambios aplicados en el core C++:
 
 La salida con `enabled=false` permanece en bypass limpio: el core no aplica filtros, ganancia ni calibración tonal y solo sanea denormals/NaN por seguridad.
 
-## Ajuste fino de profundidad — mayo 2026
+## Ajuste fino de profundidad subgrave (fase EQ ±8 / metadata)
 
-Se reforzó el carácter Epicenter sin usar EQ ni bass boost genérico. Los cambios siguen dentro del core `EpicenterDSPCore`:
+Se revisó la calibración real del core y se reforzó únicamente el DSP Epicenter; no se usó EQ ni FX para simular profundidad. Los cambios mantienen gate musical, soft clip, trim final y bypass limpio.
 
-| Constante / curva | Valor previo | Valor nuevo | Motivo |
-|---|---:|---:|---|
-| `DEEP_EXTENSION_AMOUNT` | `0.30` | `0.36` | Más energía subgrave reconstruida desde la capa profunda, por debajo del rango de bass boost típico. |
-| `SYNTH_DEPTH_GAIN` | `1.12` | `1.18` | Mayor presencia del sintetizador subgrave manteniendo soft clip. |
-| `DEEP_EXTENSION_MIX_BASE` | `0.42` | `0.46` | Más profundidad base al activar Epicenter. |
-| `DEEP_EXTENSION_MIX_VOICE` | `0.52` | `0.58` | Más aporte profundo cuando la protección de voz permite espacio. |
-| `GATE_DETECTOR_FLOOR` | `0.38` | `0.40` | Más autoridad con bajo centrado/mono real. |
-| `GATE_DETECTOR_AUTHORITY` | `0.18` | `0.22` | Sostiene mejor detector fuerte sin abrirse con ruido sin bajo. |
-| `OUTPUT_DC_HIGHPASS_HZ` | `28 Hz` | `27 Hz` | Un poco más de extensión manteniendo filtro subsónico seguro. |
-| Curva de intensidad | lineal | `pow(intensity, 0.85)` | El efecto aparece antes en medio recorrido sin concentrarse solo en 90–100%. |
+| Área | Valor v4 | Valor ajuste fino | Motivo | Protección |
+|---|---:|---:|---|---|
+| `DEEP_EXTENSION_AMOUNT` | `0.30` | `0.36` | Más presencia 30–40 Hz desde la capa reconstruida. | Sigue por HPF subsónico, envelope sustain y soft clip. |
+| `SYNTH_DEPTH_GAIN` | `1.12` | `1.18` | Más autoridad del sintetizado sin empujar EQ ni bass boost. | `protectedSynth`, gate y soft clip siguen activos. |
+| Deep mix | `0.42 + voiceProtection * 0.52` | `0.46 + voiceProtection * 0.58` | La capa profunda pesa más cuando la voz deja espacio. | `voiceProtection` reduce mezcla en presencia vocal. |
+| Gate | floor `0.38`, authority `0.18`, sustain desde `0.55` | floor `0.40`, authority `0.22`, sustain desde `0.50` | Abre con más decisión ante bajo centrado/detector fuerte. | Sigue dependiendo de `detectorActivity`; no abre con ruido sin bajo. |
+| Intensity curve | lineal | `pow(intensity, 0.82)` | El efecto se percibe antes de 90–100% y escala más progresivo. | `EPICENTER_INTENSITY_HEADROOM` y `MAX_SCALE` no se aumentan. |
+| Output HPF | `28 Hz` | `26 Hz` | Más profundidad audible sin liberar infrasonido extremo. | DC/subsonic HPF final permanece activo. |
+| Deep HPF | `23 Hz` | `23 Hz` | Sin cambio para no liberar rumble peligroso. | HPF dedicado antes de mezclar deep extension. |
 
-La extensión profunda mantiene HPF dedicado a 23 Hz, soft clip y trim de salida. Seek, stop y cambio de canción siguen reseteando el estado DSP desde el motor nativo.
+Seek, stop y cambio de canción siguen llamando `epicenterDSP.reset()` desde `NativeAudioEngine`, por lo que no quedan envelopes/rumble residuales entre posiciones o pistas.
