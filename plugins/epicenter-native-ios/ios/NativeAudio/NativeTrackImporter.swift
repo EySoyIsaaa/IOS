@@ -92,7 +92,7 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
             fileExtension: fileExtension
         )
 
-        return NativeTrack(
+        let track = NativeTrack(
             id: UUID().uuidString,
             stableId: stableId,
             title: metadata.title?.nilIfBlank ?? fallbackTitle,
@@ -101,6 +101,7 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
             durationMs: durationMs,
             fileName: fileName,
             fileExtension: fileExtension,
+            codec: audioProperties.codec,
             sourceUri: sourceURL.absoluteString,
             bookmarkData: bookmarkData,
             localFilePath: copiedURL.path,
@@ -117,6 +118,8 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
             playCount: 0,
             lastPlayedAt: nil
         )
+        logImportedMetadata(title: metadata.title?.nilIfBlank ?? fallbackTitle, properties: audioProperties, fileExtension: fileExtension)
+        return track
     }
 
     private func removeDuplicateSandboxCopyIfNeeded(importedTrack: NativeTrack, savedTrack: NativeTrack) {
@@ -190,7 +193,8 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
         }
 
         for formatDescription in track.formatDescriptions {
-            guard let audioDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription as! CMAudioFormatDescription) else {
+            guard let audioFormatDescription = formatDescription as? CMAudioFormatDescription,
+                  let audioDescription = CMAudioFormatDescriptionGetStreamBasicDescription(audioFormatDescription) else {
                 continue
             }
             return (

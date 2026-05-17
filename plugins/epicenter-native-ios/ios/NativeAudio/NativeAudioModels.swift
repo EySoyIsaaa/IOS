@@ -17,6 +17,7 @@ struct NativeTrack {
     let durationMs: Int64
     let fileName: String
     let fileExtension: String
+    let codec: String?
     let sourceUri: String
     let bookmarkData: Data?
     let localFilePath: String?

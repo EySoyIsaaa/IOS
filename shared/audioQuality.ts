@@ -67,14 +67,14 @@ export function qualityClassLabel(qualityClass: AudioQualityClass): string {
 export function formatQualityLabel(bitDepth?: number, sampleRate?: number): string {
   const parts: string[] = [];
 
-  if (typeof bitDepth === "number") {
+  if (typeof bitDepth === 'number') {
     parts.push(`${bitDepth}-bit`);
   }
 
-  if (typeof sampleRate === "number") {
+  if (typeof sampleRate === 'number') {
     const sampleRateKHz = (sampleRate / 1000).toFixed(sampleRate % 1000 === 0 ? 0 : 1);
     parts.push(`${sampleRateKHz}kHz`);
   }
 
-  return parts.join(" ");
+  return parts.join(' ');
 }

@@ -185,7 +185,7 @@ export function useIosNativeAudioProcessor() {
 
   useEffect(() => {
     if (!eqEnabled) return;
-    void EpicenterNative.setEqBands({ gains: eqBands.map((band) => band.gain) }).catch(reportError);
+    void EpicenterNative.setEqBands({ gains: eqBands.map((band) => clampEqGain(band.gain)) }).catch(reportError);
   }, [eqBands, eqEnabled, reportError]);
 
   const setEpicenterEnabled = useCallback((enabled: boolean) => {

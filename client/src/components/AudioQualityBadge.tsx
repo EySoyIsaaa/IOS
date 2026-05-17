@@ -40,7 +40,9 @@ export function AudioQualityBadge({
         className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[8px] font-black tracking-[0.14em] uppercase ${
           isHighRes
             ? "border-[rgba(255,16,42,0.55)] text-[var(--ep-red)]"
-            : "border-[var(--ep-border)] text-[var(--ep-text-muted)]"
+            : tier === "cd"
+              ? "border-[rgba(255,255,255,0.35)] text-[var(--ep-text-secondary)]"
+              : "border-[var(--ep-border)] text-[var(--ep-text-muted)]"
         }`}
         data-testid="quality-badge-compact"
       >

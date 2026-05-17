@@ -50,8 +50,8 @@ final class NativeLibraryDatabase {
                 id, stable_id, title, artist, album, duration_ms, file_name, file_extension,
                 source_uri, bookmark_data, local_file_path, source_type, added_at, updated_at,
                 size_bytes, sample_rate, bit_depth, bitrate, channel_count, album_art_uri,
-                is_available, play_count, last_played_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                is_available, play_count, last_played_at, codec
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(stable_id) DO UPDATE SET
                 title = excluded.title,
                 artist = excluded.artist,
@@ -59,6 +59,7 @@ final class NativeLibraryDatabase {
                 duration_ms = excluded.duration_ms,
                 file_name = excluded.file_name,
                 file_extension = excluded.file_extension,
+                codec = excluded.codec,
                 source_uri = excluded.source_uri,
                 bookmark_data = excluded.bookmark_data,
                 local_file_path = excluded.local_file_path,
@@ -197,16 +198,27 @@ final class NativeLibraryDatabase {
             album_art_uri TEXT,
             is_available INTEGER NOT NULL DEFAULT 1,
             play_count INTEGER NOT NULL DEFAULT 0,
-            last_played_at TEXT
+            last_played_at TEXT,
+            codec TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_tracks_title ON tracks(title COLLATE NOCASE);
         CREATE INDEX IF NOT EXISTS idx_tracks_artist ON tracks(artist COLLATE NOCASE);
         CREATE INDEX IF NOT EXISTS idx_tracks_album ON tracks(album COLLATE NOCASE);
         CREATE INDEX IF NOT EXISTS idx_tracks_added_at ON tracks(added_at);
         CREATE INDEX IF NOT EXISTS idx_tracks_updated_at ON tracks(updated_at);
+        ALTER TABLE tracks ADD COLUMN codec TEXT;
         """
-        guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else {
-            throw DatabaseError.stepFailed(lastErrorMessage())
+        let statements = sql
+            .split(separator: ";")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        for statement in statements {
+            if sqlite3_exec(db, statement, nil, nil, nil) != SQLITE_OK {
+                let message = lastErrorMessage()
+                if !statement.uppercased().hasPrefix("ALTER TABLE") || !message.localizedCaseInsensitiveContains("duplicate column") {
+                    throw DatabaseError.stepFailed(message)
+                }
+            }
         }
     }
 
@@ -242,6 +254,7 @@ final class NativeLibraryDatabase {
         sqlite3_bind_int(statement, 21, track.isAvailable ? 1 : 0)
         sqlite3_bind_int(statement, 22, Int32(track.playCount))
         bindNullableText(track.lastPlayedAt.map { NativeTrack.dateFormatter.string(from: $0) }, to: statement, at: 23)
+        bindNullableText(track.codec, to: statement, at: 24)
     }
 
     private func bindSearch(_ value: String, to statement: OpaquePointer?) {
@@ -306,6 +319,7 @@ final class NativeLibraryDatabase {
             durationMs: sqlite3_column_int64(statement, 5),
             fileName: text(statement, 6) ?? "",
             fileExtension: text(statement, 7) ?? "",
+            codec: text(statement, 23),
             sourceUri: text(statement, 8) ?? "",
             bookmarkData: data(statement, 9),
             localFilePath: text(statement, 10),
