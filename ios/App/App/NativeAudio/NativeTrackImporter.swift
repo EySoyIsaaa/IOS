@@ -2,9 +2,20 @@ import AVFoundation
 import CryptoKit
 import Foundation
 import UIKit
-import UniformTypeIdentifiers
 
 final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
+    private static let audioDocumentTypes = [
+        "public.audio",
+        "public.mp3",
+        "public.mpeg-4-audio",
+        "com.apple.m4a-audio",
+        "com.apple.protected-mpeg-4-audio",
+        "org.xiph.flac",
+        "com.microsoft.waveform-audio",
+        "public.aifc-audio",
+        "public.aiff-audio",
+    ]
+
     private let repository: NativeTrackRepository
     private var completion: ((Result<[NativeTrack], Error>) -> Void)?
 
@@ -28,7 +39,7 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
 
     func importTracks(from presenter: UIViewController, completion: @escaping (Result<[NativeTrack], Error>) -> Void) {
         self.completion = completion
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.audio], asCopy: false)
+        let picker = UIDocumentPickerViewController(documentTypes: Self.audioDocumentTypes, in: .open)
         picker.delegate = self
         picker.allowsMultipleSelection = true
         presenter.present(picker, animated: true)
@@ -73,8 +84,9 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
         let copiedURL = try copyIntoAudioLibrary(sourceURL)
         let copiedSizeBytes = Int64((try? copiedURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? Int(originalSizeBytes))
         let asset = AVURLAsset(url: copiedURL)
+        let fallbackTitle = sourceURL.deletingPathExtension().lastPathComponent
         let metadata = readMetadata(from: asset)
-        let audioProperties = readAudioProperties(from: asset, sizeBytes: copiedSizeBytes)
+        let audioProperties = readAudioProperties(from: asset, sizeBytes: copiedSizeBytes, fileExtension: copiedURL.pathExtension.lowercased())
         let durationMs = durationMs(for: asset)
         let now = Date()
         let bookmarkData = try? copiedURL.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
@@ -82,17 +94,19 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
         let albumArtUri = try saveArtworkIfPresent(metadata.artworkData, stableId: stableId)
         let fileName = copiedURL.lastPathComponent
         let fileExtension = copiedURL.pathExtension.lowercased()
-        let fallbackTitle = copiedURL.deletingPathExtension().lastPathComponent
+        let resolvedTitle = metadata.title?.nilIfBlank ?? fallbackTitle
 
-        return NativeTrack(
+        let track = NativeTrack(
             id: UUID().uuidString,
             stableId: stableId,
-            title: metadata.title?.nilIfBlank ?? fallbackTitle,
+            title: resolvedTitle,
             artist: metadata.artist?.nilIfBlank,
             album: metadata.album?.nilIfBlank,
             durationMs: durationMs,
             fileName: fileName,
             fileExtension: fileExtension,
+            codec: audioProperties.codec,
+            qualityClass: qualityClass(sampleRate: audioProperties.sampleRate, bitDepth: audioProperties.bitDepth, bitrate: audioProperties.bitrate, codec: audioProperties.codec, fileExtension: fileExtension),
             sourceUri: sourceURL.absoluteString,
             bookmarkData: bookmarkData,
             localFilePath: copiedURL.path,
@@ -109,6 +123,8 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
             playCount: 0,
             lastPlayedAt: nil
         )
+        logImportedMetadata(title: resolvedTitle, properties: audioProperties, fileExtension: fileExtension)
+        return track
     }
 
     private func removeDuplicateSandboxCopyIfNeeded(importedTrack: NativeTrack, savedTrack: NativeTrack) {
@@ -138,39 +154,181 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
     }
 
     private func readMetadata(from asset: AVURLAsset) -> (title: String?, artist: String?, album: String?, artworkData: Data?) {
-        let metadata = asset.commonMetadata
-        let title = firstStringValue(in: metadata, for: .commonIdentifierTitle)
-        let artist = firstStringValue(in: metadata, for: .commonIdentifierArtist)
-        let album = firstStringValue(in: metadata, for: .commonIdentifierAlbumName)
-        let artworkData = AVMetadataItem.metadataItems(from: metadata, filteredByIdentifier: .commonIdentifierArtwork).first?.dataValue
+        let metadataGroups = [asset.commonMetadata, asset.metadata] + asset.availableMetadataFormats.map { asset.metadata(forFormat: $0) }
+        let items = metadataGroups.flatMap { $0 }
+        let title = firstMetadataString(in: items, identifiers: [.commonIdentifierTitle], keys: ["title", "tit2", "©nam", "name", "songName"])
+        let artist = firstMetadataString(in: items, identifiers: [.commonIdentifierArtist], keys: ["artist", "tpe1", "©art", "author", "performer"])
+        let album = firstMetadataString(in: items, identifiers: [.commonIdentifierAlbumName], keys: ["album", "talb", "©alb", "albumName"])
+        let artworkData = firstArtworkData(in: items)
         return (title, artist, album, artworkData)
     }
 
-    private func firstStringValue(in metadata: [AVMetadataItem], for identifier: AVMetadataIdentifier) -> String? {
-        AVMetadataItem.metadataItems(from: metadata, filteredByIdentifier: identifier).first?.stringValue
+    private func firstMetadataString(in items: [AVMetadataItem], identifiers: [AVMetadataIdentifier], keys: [String]) -> String? {
+        for identifier in identifiers {
+            if let value = AVMetadataItem.metadataItems(from: items, filteredByIdentifier: identifier).first?.stringValue?.nilIfBlank {
+                return value
+            }
+        }
+        let normalizedKeys = Set(keys.map { $0.lowercased() })
+        for item in items {
+            let keyCandidates = [
+                item.commonKey?.rawValue,
+                item.identifier?.rawValue,
+                item.key as? String,
+                item.key.map { String(describing: $0) },
+            ].compactMap { $0?.lowercased() }
+            guard keyCandidates.contains(where: { candidate in normalizedKeys.contains(where: { candidate.contains($0) }) }) else { continue }
+            if let value = item.stringValue?.nilIfBlank { return value }
+            if let value = item.value as? String, let clean = value.nilIfBlank { return clean }
+        }
+        return nil
     }
 
-    private func readAudioProperties(from asset: AVURLAsset, sizeBytes: Int64) -> (sampleRate: Int?, bitDepth: Int?, bitrate: Int?, channelCount: Int?) {
-        guard let track = asset.tracks(withMediaType: .audio).first else {
-            return (nil, nil, nil, nil)
+    private func firstArtworkData(in items: [AVMetadataItem]) -> Data? {
+        let artworkCandidates = items.filter { item in
+            if item.identifier == .commonIdentifierArtwork { return true }
+            let keyCandidates = [
+                item.commonKey?.rawValue,
+                item.identifier?.rawValue,
+                item.key as? String,
+                item.key.map { String(describing: $0) },
+            ].compactMap { $0?.lowercased() }
+            return keyCandidates.contains { $0.contains("artwork") || $0.contains("apic") || $0.contains("covr") || $0.contains("cover") }
         }
+        for item in artworkCandidates {
+            if let data = item.dataValue, !data.isEmpty { return data }
+            if let data = item.value as? Data, !data.isEmpty { return data }
+            if let dictionary = item.value as? [String: Any], let data = dictionary["data"] as? Data, !data.isEmpty { return data }
+        }
+        return nil
+    }
 
+    private func readAudioProperties(
+        from asset: AVURLAsset,
+        sizeBytes: Int64,
+        fileExtension: String
+    ) -> (sampleRate: Int?, bitDepth: Int?, bitrate: Int?, channelCount: Int?, codec: String?) {
         var sampleRate: Int?
         var bitDepth: Int?
         var channelCount: Int?
-        for formatDescription in track.formatDescriptions {
-            guard let audioDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription as! CMAudioFormatDescription) else {
-                continue
+        var codec: String?
+
+        if let file = try? AVAudioFile(forReading: asset.url) {
+            let description = file.fileFormat.streamDescription.pointee
+            sampleRate = Int(description.mSampleRate.rounded())
+            bitDepth = normalizedBitDepth(Int(description.mBitsPerChannel), commonFormat: file.fileFormat.commonFormat)
+            channelCount = Int(description.mChannelsPerFrame)
+            codec = normalizedCodec(for: fourCharCode(description.mFormatID), fileExtension: fileExtension)
+        }
+
+        if sampleRate == nil || bitDepth == nil || channelCount == nil || codec == nil {
+            if let track = asset.tracks(withMediaType: .audio).first {
+                for formatDescription in track.formatDescriptions {
+                    let audioFormatDescription = formatDescription as! CMAudioFormatDescription
+
+                    guard let audioDescription =
+                        CMAudioFormatDescriptionGetStreamBasicDescription(audioFormatDescription) else {
+                        continue
+                    }
+
+                    sampleRate = Int(audioDescription.pointee.mSampleRate.rounded())
+                    bitDepth = normalizedBitDepth(Int(audioDescription.pointee.mBitsPerChannel))
+                    channelCount = Int(audioDescription.pointee.mChannelsPerFrame)
+                    codec = normalizedCodec(
+                        for: fourCharCode(audioDescription.pointee.mFormatID),
+                        fileExtension: fileExtension
+                    )
+                    break
+                }
             }
-            sampleRate = Int(audioDescription.pointee.mSampleRate.rounded())
-            bitDepth = Int(audioDescription.pointee.mBitsPerChannel)
-            channelCount = Int(audioDescription.pointee.mChannelsPerFrame)
-            break
         }
 
         let seconds = CMTimeGetSeconds(asset.duration)
         let bitrate = seconds.isFinite && seconds > 0 ? Int(Double(sizeBytes * 8) / seconds) : nil
-        return (sampleRate, bitDepth == 0 ? nil : bitDepth, bitrate, channelCount == 0 ? nil : channelCount)
+        return (sampleRate, bitDepth, bitrate, channelCount == 0 ? nil : channelCount, codec ?? normalizedCodec(for: nil, fileExtension: fileExtension))
+    }
+
+    private func normalizedBitDepth(_ value: Int) -> Int? {
+        guard value > 0 else { return nil }
+        return value
+    }
+
+    private func normalizedBitDepth(_ value: Int, commonFormat: AVAudioCommonFormat?) -> Int? {
+        if value > 0 { return value }
+        switch commonFormat {
+        case .pcmFormatFloat32: return 32
+        case .pcmFormatFloat64: return 64
+        case .pcmFormatInt16: return 16
+        case .pcmFormatInt32: return 32
+        default: return nil
+        }
+    }
+
+    private func normalizedCodec(for formatCode: String?, fileExtension: String) -> String? {
+        let normalizedFormat = formatCode?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch normalizedFormat {
+        case "lpcm": return "lpcm"
+        case "alac": return "alac"
+        case "flac": return "flac"
+        case "mp3", ".mp3": return "mp3"
+        case "aac", "aac ", "mp4a": return "aac"
+        default:
+            switch fileExtension.lowercased() {
+            case "wav", "wave", "aif", "aiff", "aifc", "caf": return "lpcm"
+            case "flac": return "flac"
+            case "alac": return "alac"
+            case "mp3": return "mp3"
+            case "aac", "m4a", "mp4", "m4b": return "aac"
+            default: return normalizedFormat?.nilIfBlank ?? fileExtension.lowercased().nilIfBlank
+            }
+        }
+    }
+
+    private func fourCharCode(_ value: AudioFormatID) -> String {
+        let bytes: [UInt8] = [
+            UInt8((value >> 24) & 0xff),
+            UInt8((value >> 16) & 0xff),
+            UInt8((value >> 8) & 0xff),
+            UInt8(value & 0xff),
+        ]
+        return String(bytes: bytes, encoding: .macOSRoman) ?? ""
+    }
+
+    private func isHiResMetadata(sampleRate: Int?, bitDepth: Int?, codec: String?, fileExtension: String) -> Bool {
+        qualityClass(sampleRate: sampleRate, bitDepth: bitDepth, bitrate: nil, codec: codec, fileExtension: fileExtension) == "hi-res" ||
+        qualityClass(sampleRate: sampleRate, bitDepth: bitDepth, bitrate: nil, codec: codec, fileExtension: fileExtension) == "studio"
+    }
+
+    private func qualityClass(sampleRate: Int?, bitDepth: Int?, bitrate: Int?, codec: String?, fileExtension: String) -> String {
+        let sampleRateValue = sampleRate ?? 0
+        let bitDepthValue = bitDepth ?? 0
+        let codecToken = codec?.lowercased()
+        let extensionToken = fileExtension.lowercased()
+        let losslessTokens = ["lpcm", "alac", "flac", "wav", "wave", "aif", "aiff", "aifc", "caf"]
+        let lossyTokens = ["mp3", "aac", "mp4a", "m4a", "mp4", "ogg", "opus"]
+        let isLossless = [codecToken, extensionToken].compactMap { $0 }.contains { losslessTokens.contains($0) }
+        let isLossy = [codecToken, extensionToken].compactMap { $0 }.contains { lossyTokens.contains($0) }
+        if bitDepthValue >= 32 && sampleRateValue >= 48_000 && isLossless { return "studio" }
+        if bitDepthValue >= 24 && sampleRateValue >= 48_000 { return "hi-res" }
+        if bitDepth == nil && sampleRateValue >= 88_200 && isLossless && !isLossy { return "hi-res" }
+        if bitDepthValue == 16 && sampleRateValue == 44_100 { return "cd" }
+        if isLossless { return "lossless" }
+        if isLossy || (bitrate ?? 0) > 0 && bitDepth == nil { return "lossy" }
+        if bitDepth != nil || sampleRate != nil || bitrate != nil { return "standard" }
+        return "unknown"
+    }
+
+    private func logImportedMetadata(
+        title: String,
+        properties: (sampleRate: Int?, bitDepth: Int?, bitrate: Int?, channelCount: Int?, codec: String?),
+        fileExtension: String
+    ) {
+        NSLog("[iOS Metadata] title=\(title)")
+        NSLog("[iOS Metadata] sampleRate=\(properties.sampleRate.map(String.init) ?? "unknown")")
+        NSLog("[iOS Metadata] bitDepth=\(properties.bitDepth.map(String.init) ?? "unknown")")
+        NSLog("[iOS Metadata] bitrate=\(properties.bitrate.map(String.init) ?? "unknown")")
+        NSLog("[iOS Metadata] codec=\(properties.codec ?? fileExtension)")
+        NSLog("[iOS Metadata] isHiRes=\(isHiResMetadata(sampleRate: properties.sampleRate, bitDepth: properties.bitDepth, codec: properties.codec, fileExtension: fileExtension))")
     }
 
     private func stableId(originalFileName: String, sizeBytes: Int64, durationMs: Int64) -> String {
@@ -180,9 +338,20 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
     }
 
     private func saveArtworkIfPresent(_ data: Data?, stableId: String) throws -> String? {
-        guard let data = data, !data.isEmpty else { return nil }
-        let fileURL = artworkDirectory.appendingPathComponent("\(stableId).artwork")
-        try data.write(to: fileURL, options: [.atomic])
+        guard let data = data, !data.isEmpty, let image = UIImage(data: data) else { return nil }
+        let imageData: Data
+        let fileExtension: String
+        if data.prefix(4).elementsEqual([UInt8(0x89), UInt8(0x50), UInt8(0x4e), UInt8(0x47)]), let pngData = image.pngData() {
+            imageData = pngData
+            fileExtension = "png"
+        } else if let jpegData = image.jpegData(compressionQuality: 0.92) {
+            imageData = jpegData
+            fileExtension = "jpg"
+        } else {
+            return nil
+        }
+        let fileURL = artworkDirectory.appendingPathComponent("\(stableId).\(fileExtension)")
+        try imageData.write(to: fileURL, options: [.atomic])
         return fileURL.path
     }
 }

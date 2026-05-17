@@ -6,9 +6,12 @@
  * scanner is used for tracks.
  */
 
-import { useState, useCallback, useEffect } from 'react';
-import { EpicenterNative } from '@/native/iosNativeAudio';
-import { nativeTrackToAppTrack, type IOSAppTrack } from '@/native/iosTrackMapper';
+import { useState, useCallback, useEffect } from "react";
+import { EpicenterNative } from "@/native/iosNativeAudio";
+import {
+  nativeTrackToAppTrack,
+  type IOSAppTrack,
+} from "@/native/iosTrackMapper";
 
 export interface Track extends IOSAppTrack {
   id: string;
@@ -17,6 +20,8 @@ export interface Track extends IOSAppTrack {
   isEphemeral?: boolean;
   fileName?: string;
   fileType?: string;
+  codec?: string;
+  qualityClass?: string;
   fileSize?: number;
   title: string;
   artist: string;
@@ -27,7 +32,7 @@ export interface Track extends IOSAppTrack {
   bitrate?: number;
   isHiRes?: boolean;
   sourceUri?: string;
-  sourceType?: 'manual-ios';
+  sourceType?: "manual-ios";
   albumId?: number;
   albumArtUri?: string;
   mediaStoreId?: string;
@@ -38,7 +43,7 @@ export interface Track extends IOSAppTrack {
   lastSeenAt?: number;
   missingSince?: number;
   missingCount?: number;
-  scanCompleteness?: 'partial' | 'complete';
+  scanCompleteness?: "partial" | "complete";
   lastValidatedAt?: number;
 }
 
@@ -66,7 +71,10 @@ export interface QueueController {
   addToLibrary: (files: File[]) => Promise<ImportResult>;
   importManualTracksFromNativePicker: () => Promise<ImportResult>;
   addMediaStoreTracks: () => Promise<ImportResult>;
-  reconcileMediaStoreTracks: () => Promise<{ updated: number; missing: number }>;
+  reconcileMediaStoreTracks: () => Promise<{
+    updated: number;
+    missing: number;
+  }>;
   removeFromLibrary: (id: string) => Promise<void>;
   clearLibrary: () => Promise<void>;
   addToQueue: (track: Track) => void;
@@ -81,6 +89,7 @@ export interface QueueController {
   playTrack: (index: number) => void;
   nextTrack: () => void;
   previousTrack: () => void;
+  syncCurrentTrackById: (trackId: string) => void;
   persistEphemeralTrack: (trackId: string) => Promise<boolean>;
   addTrack: (file: File) => Promise<void>;
   addTracks: (files: File[]) => Promise<void>;
@@ -92,7 +101,6 @@ export interface QueueController {
 const DEFAULT_PAGE_SIZE = 1000;
 
 const nativeTrackToTrack = nativeTrackToAppTrack;
-
 
 const setNativeQueue = async (tracks: Track[], startIndex: number) => {
   if (tracks.length === 0) return;
@@ -111,20 +119,24 @@ export function useAudioQueue(): QueueController {
     isImporting: false,
     current: 0,
     total: 0,
-    currentFileName: '',
+    currentFileName: "",
   });
 
   const refreshLibrary = useCallback(async (): Promise<Track[]> => {
-    console.info('[iOS Native Library] app start load');
+    console.info("[iOS Native Library] app start load");
     setIsLoading(true);
     try {
-      const page = await EpicenterNative.getLibraryPage({ offset: 0, limit: DEFAULT_PAGE_SIZE, sort: 'addedAt' });
+      const page = await EpicenterNative.getLibraryPage({
+        offset: 0,
+        limit: DEFAULT_PAGE_SIZE,
+        sort: "addedAt",
+      });
       const tracks = page.tracks.map(nativeTrackToTrack);
       setLibrary(tracks);
-      console.info('[iOS Native Library] loaded count', tracks.length);
+      console.info("[iOS Native Library] loaded count", tracks.length);
       return tracks;
     } catch (error) {
-      console.error('[iOS Native Library] load error', error);
+      console.error("[iOS Native Library] load error", error);
       setLibrary([]);
       return [];
     } finally {
@@ -136,21 +148,35 @@ export function useAudioQueue(): QueueController {
     void refreshLibrary();
   }, [refreshLibrary]);
 
-  const importManualTracksFromNativePicker = useCallback(async (): Promise<ImportResult> => {
-    console.info('[iOS Native Library] import requested');
-    setImportProgress({ isImporting: true, current: 0, total: 1, currentFileName: 'iOS Import' });
-    try {
-      const result = await EpicenterNative.importTracks();
-      console.info('[iOS Native Library] imported count', result.tracks.length);
-      await refreshLibrary();
-      return { added: result.tracks.length, duplicates: [] };
-    } catch (error) {
-      console.error('[iOS Native Library] import error', error);
-      throw error;
-    } finally {
-      setImportProgress({ isImporting: false, current: 0, total: 0, currentFileName: '' });
-    }
-  }, [refreshLibrary]);
+  const importManualTracksFromNativePicker =
+    useCallback(async (): Promise<ImportResult> => {
+      console.info("[iOS Native Library] import requested");
+      setImportProgress({
+        isImporting: true,
+        current: 0,
+        total: 1,
+        currentFileName: "iOS Import",
+      });
+      try {
+        const result = await EpicenterNative.importTracks();
+        console.info(
+          "[iOS Native Library] imported count",
+          result.tracks.length,
+        );
+        await refreshLibrary();
+        return { added: result.tracks.length, duplicates: [] };
+      } catch (error) {
+        console.error("[iOS Native Library] import error", error);
+        throw error;
+      } finally {
+        setImportProgress({
+          isImporting: false,
+          current: 0,
+          total: 0,
+          currentFileName: "",
+        });
+      }
+    }, [refreshLibrary]);
 
   const removeFromLibrary = useCallback(async (id: string) => {
     await EpicenterNative.deleteTrack({ id });
@@ -167,38 +193,87 @@ export function useAudioQueue(): QueueController {
     setCurrentTrackIndex(-1);
   }, [library]);
 
-  const addToQueue = useCallback((track: Track) => {
-    setQueue((prev) => {
-      const next = [...prev, track];
-      void setNativeQueue(next, currentTrackIndex >= 0 ? currentTrackIndex : next.length - 1);
-      return next;
-    });
-  }, [currentTrackIndex]);
+  const addToQueue = useCallback(
+    (track: Track) => {
+      setQueue((prev) => {
+        const next = [...prev, track];
+        void setNativeQueue(
+          next,
+          currentTrackIndex >= 0 ? currentTrackIndex : next.length - 1,
+        );
+        return next;
+      });
+    },
+    [currentTrackIndex],
+  );
 
-  const addToQueueNext = useCallback((track: Track) => {
-    setQueue((prev) => {
-      const insertIndex = currentTrackIndex >= 0 ? currentTrackIndex + 1 : 0;
-      const next = [...prev.slice(0, insertIndex), track, ...prev.slice(insertIndex)];
-      void setNativeQueue(next, currentTrackIndex >= 0 ? currentTrackIndex : insertIndex);
-      return next;
-    });
-  }, [currentTrackIndex]);
+  const addToQueueNext = useCallback(
+    (track: Track) => {
+      setQueue((prev) => {
+        const insertIndex = currentTrackIndex >= 0 ? currentTrackIndex + 1 : 0;
+        const next = [
+          ...prev.slice(0, insertIndex),
+          track,
+          ...prev.slice(insertIndex),
+        ];
+        void setNativeQueue(
+          next,
+          currentTrackIndex >= 0 ? currentTrackIndex : insertIndex,
+        );
+        return next;
+      });
+    },
+    [currentTrackIndex],
+  );
 
-  const addMultipleToQueue = useCallback((tracks: Track[]) => {
-    setQueue((prev) => {
-      const next = [...prev, ...tracks];
-      void setNativeQueue(next, currentTrackIndex >= 0 ? currentTrackIndex : 0);
-      return next;
-    });
-  }, [currentTrackIndex]);
+  const addMultipleToQueue = useCallback(
+    (tracks: Track[]) => {
+      setQueue((prev) => {
+        const next = [...prev, ...tracks];
+        void setNativeQueue(
+          next,
+          currentTrackIndex >= 0 ? currentTrackIndex : 0,
+        );
+        return next;
+      });
+    },
+    [currentTrackIndex],
+  );
 
-  const playTrack = useCallback((index: number) => {
-    setCurrentTrackIndex(index);
+  const moveToQueueIndex = useCallback((index: number, reason: string) => {
     setQueue((prev) => {
-      void setNativeQueue(prev, index);
+      if (!Array.isArray(prev) || prev.length === 0) {
+        console.warn("[Queue] move requested with empty queue", {
+          reason,
+          index,
+        });
+        setCurrentTrackIndex(-1);
+        return [];
+      }
+
+      setCurrentTrackIndex((before) => {
+        const after = Math.max(0, Math.min(index, prev.length - 1));
+        const track = prev[after];
+        console.info("[Queue] before/after index", {
+          reason,
+          before,
+          after,
+          trackId: track?.id,
+          title: track?.title,
+        });
+        void setNativeQueue(prev, after);
+        return after;
+      });
       return prev;
     });
   }, []);
+
+  const playTrack = useCallback(
+    (index: number) => {
+      moveToQueueIndex(index, "playTrack");
+    },
+    [moveToQueueIndex],
+  );
 
   const playNow = useCallback((track: Track) => {
     const next = [track];
@@ -216,7 +291,9 @@ export function useAudioQueue(): QueueController {
   const shuffleAll = useCallback((tracks: Track[], firstTrackId?: string) => {
     const shuffled = [...tracks].sort(() => Math.random() - 0.5);
     if (firstTrackId) {
-      const firstIndex = shuffled.findIndex((track) => track.id === firstTrackId);
+      const firstIndex = shuffled.findIndex(
+        (track) => track.id === firstTrackId,
+      );
       if (firstIndex > 0) {
         const [first] = shuffled.splice(firstIndex, 1);
         shuffled.unshift(first);
@@ -228,29 +305,63 @@ export function useAudioQueue(): QueueController {
   }, []);
 
   const nextTrack = useCallback(() => {
-    setCurrentTrackIndex((prev) => {
-      const next = prev < queue.length - 1 ? prev + 1 : prev;
-      if (next !== prev) void EpicenterNative.next();
-      return next;
+    const before = currentTrackIndex;
+    const after = before < queue.length - 1 ? before + 1 : before;
+    console.info("[Queue] next requested", {
+      before,
+      after,
+      queueLength: queue.length,
     });
-  }, [queue.length]);
+    if (after !== before) {
+      moveToQueueIndex(after, "next");
+    }
+  }, [currentTrackIndex, moveToQueueIndex, queue.length]);
 
   const previousTrack = useCallback(() => {
-    setCurrentTrackIndex((prev) => {
-      const next = prev > 0 ? prev - 1 : prev;
-      if (next !== prev) void EpicenterNative.previous();
-      return next;
+    const before = currentTrackIndex;
+    const after = before > 0 ? before - 1 : before;
+    console.info("[Queue] previous requested", {
+      before,
+      after,
+      queueLength: queue.length,
     });
-  }, []);
+    if (after !== before) {
+      moveToQueueIndex(after, "previous");
+    }
+  }, [currentTrackIndex, moveToQueueIndex, queue.length]);
 
-  const removeFromQueue = useCallback((id: string) => {
-    setQueue((prev) => {
-      const next = prev.filter((track) => track.id !== id);
-      setCurrentTrackIndex((current) => Math.min(current, next.length - 1));
-      void setNativeQueue(next, Math.max(0, Math.min(currentTrackIndex, next.length - 1)));
-      return next;
-    });
-  }, [currentTrackIndex]);
+  const syncCurrentTrackById = useCallback(
+    (trackId: string) => {
+      if (!trackId) return;
+      setCurrentTrackIndex((before) => {
+        const after = queue.findIndex((track) => track.id === trackId);
+        if (after < 0 || after === before) return before;
+        console.info("[Queue] before/after index", {
+          reason: "native-sync",
+          before,
+          after,
+          trackId,
+        });
+        return after;
+      });
+    },
+    [queue],
+  );
+
+  const removeFromQueue = useCallback(
+    (id: string) => {
+      setQueue((prev) => {
+        const next = prev.filter((track) => track.id !== id);
+        setCurrentTrackIndex((current) => Math.min(current, next.length - 1));
+        void setNativeQueue(
+          next,
+          Math.max(0, Math.min(currentTrackIndex, next.length - 1)),
+        );
+        return next;
+      });
+    },
+    [currentTrackIndex],
+  );
 
   const clearQueue = useCallback(() => {
     setQueue([]);
@@ -274,13 +385,26 @@ export function useAudioQueue(): QueueController {
     });
   }, []);
 
-  const addToLibrary = useCallback(async () => importManualTracksFromNativePicker(), [importManualTracksFromNativePicker]);
-  const addMediaStoreTracks = useCallback(async (): Promise<ImportResult> => ({ added: 0, duplicates: [] }), []);
-  const reconcileMediaStoreTracks = useCallback(async () => ({ updated: 0, missing: 0 }), []);
+  const addToLibrary = useCallback(
+    async () => importManualTracksFromNativePicker(),
+    [importManualTracksFromNativePicker],
+  );
+  const addMediaStoreTracks = useCallback(
+    async (): Promise<ImportResult> => ({ added: 0, duplicates: [] }),
+    [],
+  );
+  const reconcileMediaStoreTracks = useCallback(
+    async () => ({ updated: 0, missing: 0 }),
+    [],
+  );
   const getTrackFile = useCallback(async () => undefined, []);
   const persistEphemeralTrack = useCallback(async () => true, []);
-  const addTrack = useCallback(async () => { await importManualTracksFromNativePicker(); }, [importManualTracksFromNativePicker]);
-  const addTracks = useCallback(async () => { await importManualTracksFromNativePicker(); }, [importManualTracksFromNativePicker]);
+  const addTrack = useCallback(async () => {
+    await importManualTracksFromNativePicker();
+  }, [importManualTracksFromNativePicker]);
+  const addTracks = useCallback(async () => {
+    await importManualTracksFromNativePicker();
+  }, [importManualTracksFromNativePicker]);
 
   return {
     library,
@@ -289,7 +413,8 @@ export function useAudioQueue(): QueueController {
     getTrackFile,
     queue,
     currentTrackIndex,
-    currentTrack: currentTrackIndex >= 0 ? queue[currentTrackIndex] ?? null : null,
+    currentTrack:
+      currentTrackIndex >= 0 ? (queue[currentTrackIndex] ?? null) : null,
     refreshLibrary,
     addToLibrary,
     importManualTracksFromNativePicker,
@@ -309,6 +434,7 @@ export function useAudioQueue(): QueueController {
     playTrack,
     nextTrack,
     previousTrack,
+    syncCurrentTrackById,
     persistEphemeralTrack,
     addTrack,
     addTracks,

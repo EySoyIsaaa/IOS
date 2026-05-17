@@ -115,7 +115,10 @@
     "sessionOnly": "Session only",
     "persistTrack": "Save to device",
     "persistTrackSuccess": "Track saved to local storage",
-    "persistTrackFailed": "Could not persist track to local storage"
+    "persistTrackFailed": "Could not persist track to local storage",
+    "unsupportedHiResFormat": "This Hi-Res file exceeds the format supported by the current DSP engine.",
+    "panelErrorTitle": "Actions could not be shown",
+    "panelErrorDescription": "Close this panel and try again. Playback was not stopped."
   },
   "duplicates": {
     "title": "Duplicate Songs",

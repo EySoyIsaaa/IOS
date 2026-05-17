@@ -260,6 +260,8 @@ export function AddToPlaylistModal({
 }: AddToPlaylistModalProps) {
   if (!track) return null;
 
+  const safePlaylists = Array.isArray(playlists) ? playlists : [];
+
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
       <div className="bg-zinc-900 rounded-2xl p-6 w-full max-w-sm border border-zinc-800 max-h-[80vh] flex flex-col">
@@ -268,12 +270,12 @@ export function AddToPlaylistModal({
         </h3>
         <ScrollArea className="flex-1 -mx-2">
           <div className="px-2 space-y-2">
-            {playlists.length === 0 ? (
+            {safePlaylists.length === 0 ? (
               <p className="text-zinc-500 text-center py-4">
                 {t("playlists.noPlaylists")}
               </p>
             ) : (
-              playlists.map((playlist) => (
+              safePlaylists.map((playlist) => (
                 <button
                   key={playlist.id}
                   onClick={() => onSelect(playlist.id, track)}
@@ -286,7 +288,9 @@ export function AddToPlaylistModal({
                     <p className="font-medium truncate">{playlist.name}</p>
                     <p className="text-xs text-zinc-500">
                       {t("library.songsCount", {
-                        count: playlist.trackIds.length,
+                        count: Array.isArray(playlist.trackIds)
+                          ? playlist.trackIds.length
+                          : 0,
                       })}
                     </p>
                   </div>
@@ -318,7 +322,10 @@ export function DuplicatesModal({
   t,
   onClose,
 }: DuplicatesModalProps) {
-  if (duplicateFileNames.length === 0) return null;
+  const safeDuplicateFileNames = Array.isArray(duplicateFileNames)
+    ? duplicateFileNames
+    : [];
+  if (safeDuplicateFileNames.length === 0) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
@@ -330,11 +337,13 @@ export function DuplicatesModal({
           <div>
             <h3 className="text-lg font-bold">{t("duplicates.title")}</h3>
             <p className="text-xs text-zinc-500">
-              {duplicateFileNames.length > 1
+              {safeDuplicateFileNames.length > 1
                 ? t("duplicates.skippedPlural", {
-                    count: duplicateFileNames.length,
+                    count: safeDuplicateFileNames.length,
                   })
-                : t("duplicates.skipped", { count: duplicateFileNames.length })}
+                : t("duplicates.skipped", {
+                    count: safeDuplicateFileNames.length,
+                  })}
             </p>
           </div>
         </div>
@@ -342,7 +351,7 @@ export function DuplicatesModal({
         <div className="flex-1 min-h-0">
           <ScrollArea className="h-full -mx-2 max-h-[40vh]">
             <div className="px-2 space-y-1">
-              {duplicateFileNames.map((fileName, index) => (
+              {safeDuplicateFileNames.map((fileName, index) => (
                 <div
                   key={index}
                   className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded-lg"
@@ -462,6 +471,11 @@ export function AddSongsToPlaylistModal({
 }: AddSongsToPlaylistModalProps) {
   if (!isOpen || !selectedPlaylist) return null;
 
+  const safeLibrary = Array.isArray(library) ? library.filter(Boolean) : [];
+  const selectedTrackIds = Array.isArray(selectedPlaylist.trackIds)
+    ? selectedPlaylist.trackIds
+    : [];
+
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
       <div className="bg-zinc-900 rounded-2xl p-6 w-full max-w-md border border-zinc-800 max-h-[85vh] flex flex-col">
@@ -479,16 +493,21 @@ export function AddSongsToPlaylistModal({
         </div>
         <ScrollArea className="flex-1 -mx-2">
           <div className="px-2 space-y-1">
-            {library.length === 0 ? (
+            {safeLibrary.length === 0 ? (
               <div className="text-center py-8">
                 <Music2 className="w-12 h-12 text-zinc-700 mx-auto mb-3" />
                 <p className="text-zinc-500">{t("library.noMusic")}</p>
               </div>
             ) : (
-              library.map((track) => {
-                const isInPlaylist = selectedPlaylist.trackIds.includes(
-                  track.id,
-                );
+              safeLibrary.map((track) => {
+                if (!track?.id) {
+                  console.warn(
+                    "[ActionsScreen] skipping invalid library track",
+                    track,
+                  );
+                  return null;
+                }
+                const isInPlaylist = selectedTrackIds.includes(track.id);
 
                 return (
                   <button

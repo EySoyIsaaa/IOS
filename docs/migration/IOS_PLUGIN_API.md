@@ -1,31 +1,65 @@
 # iOS Plugin API
 
-## Epicenter native API
+Plugin Capacitor: `EpicenterNative` (`EpicenterNativePlugin`).
 
-Plugin: `EpicenterNative` (`EpicenterNativePlugin`).
+## Playback y biblioteca
 
-Métodos conectados en esta fase:
+La API existente se mantiene:
 
-- `setEpicenterEnabled({ enabled: boolean })`
-  - Actualiza el bypass nativo del core C++.
-  - Devuelve `{ status: "ok", epicenter: { enabled, intensity, sweepFreq, width, balance, volume } }`.
-- `setEpicenterParams({ intensity?, sweepFreq?, sweep?, width?, balance?, volume?, output? })`
-  - Actualiza parámetros en tiempo real.
-  - `sweep` es alias de `sweepFreq` y `output` es alias de `volume` para compatibilidad.
+- `importTracks()`
+- `getLibraryPage({ offset?, limit?, search?, sort? })`
+- `getTrack({ id })`
+- `deleteTrack({ id })`
+- `setQueue({ trackIds, startIndex? })`
+- `play({ trackId? })`
+- `pause()`
+- `seek({ seconds })`
+- `stop()`
+- `next()`
+- `previous()`
 - `getPlaybackState()`
-  - Incluye `epicenter` con el estado actual del DSP.
 
-## Rango de parámetros
+## Epicenter
 
-| Parámetro | Rango | Default | Mapeo Worklet |
-|---|---:|---:|---|
-| `enabled` | boolean | `false` | Switch nativo de bypass. |
-| `intensity` | 0–100 | 100 | `parameterDescriptors.intensity`. |
-| `sweepFreq` | 27–63 Hz | 45 | `parameterDescriptors.sweepFreq`. |
-| `width` | 0–100 | 50 | `parameterDescriptors.width`. |
-| `balance` | 0–100 | 100 | `parameterDescriptors.balance`. |
-| `volume` / `output` | 0–100 | 100 | `parameterDescriptors.volume`. |
+- `setEpicenterEnabled({ enabled })`
+- `setEpicenterParams({ intensity?, sweepFreq?, sweep?, width?, balance?, volume?, output? })`
 
-## Frontend iOS
+Esta fase no modifica el carácter ni algoritmo Epicenter; solo mantiene la ruta iOS compatible con los nuevos módulos EQ/FX.
 
-`client/src/hooks/useIosNativeAudioProcessor.ts` reemplaza el stub `setDspParam` y ahora llama `EpicenterNative.setEpicenterParams({ [key]: value })`. La UI no cambió; los knobs existentes de `Home.tsx` siguen mandando `sweepFreq`, `width`, `intensity`, `balance` y `volume`.
+## EQ nativo
+
+- `setEqEnabled({ enabled })`
+- `setEqBand({ index, gain })`
+- `setEqBands({ gains })`
+- `setEqPreset({ name, gains })`
+- `resetEq()`
+
+Parámetros:
+
+| Campo | Tipo | Detalle |
+|---|---|---|
+| `enabled` | boolean | Activa/bypassea el EQ nativo. |
+| `index` | number | Índice de banda `0–30`. |
+| `gain` | number | dB clamp a `-8…+8`. |
+| `gains` | number[] | Lista de hasta 31 gains; faltantes se rellenan con `0`. |
+| `name` | string opcional | Nombre de preset para trazabilidad de respuesta. |
+
+Respuesta EQ incluye `status`, `enabled`, `bands`, `frequencies` y `headroomDb`.
+
+## FX nativos
+
+- `setReverbEnabled({ enabled })`
+- `setReverbAmount({ amount })`
+- `setConcertHallEnabled({ enabled })`
+- `setConcertHallAmount({ amount })`
+
+`amount` es `0–100` desde frontend y se convierte en nativo a wet/dry limitado. La respuesta FX incluye estado de ambos efectos, wet/dry efectivo, modo combinado y `outputVolume`.
+
+## Estado de reproducción
+
+`getPlaybackState()` agrega:
+
+- `eq`: estado del ecualizador nativo.
+- `fx`: estado de Reverb/Concert Hall.
+
+Esto permite que `useIosNativeAudioProcessor` hidrate la UI tras abrir la app o volver desde background.

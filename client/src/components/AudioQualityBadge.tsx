@@ -2,13 +2,15 @@
  * EpicenterDSP 7.0 - hardware-style audio quality badges.
  */
 
-import { formatQualityLabel, isHiResQuality } from "@shared/audioQuality";
+import { formatQualityLabel, isHiResQuality, qualityTier } from "@shared/audioQuality";
 
 interface AudioQualityBadgeProps {
   bitDepth?: number;
   sampleRate?: number;
   bitrate?: number;
   isHiRes?: boolean;
+  codec?: string;
+  fileExtension?: string;
   compact?: boolean;
   hiResLogoUrl?: string;
 }
@@ -18,11 +20,14 @@ export function AudioQualityBadge({
   sampleRate,
   bitrate,
   isHiRes,
+  codec,
+  fileExtension,
   compact = false,
   hiResLogoUrl,
 }: AudioQualityBadgeProps) {
-  const detectedHiRes = isHiResQuality(bitDepth, sampleRate);
+  const detectedHiRes = isHiResQuality(bitDepth, sampleRate, codec, fileExtension);
   const isHighRes = typeof isHiRes === "boolean" ? isHiRes : detectedHiRes;
+  const tier = qualityTier(bitDepth, sampleRate, bitrate, codec, fileExtension);
   const parts = [formatQualityLabel(bitDepth, sampleRate)].filter(Boolean);
 
   if (typeof bitrate === "number" && bitrate > 0) {
@@ -37,7 +42,9 @@ export function AudioQualityBadge({
         className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[8px] font-black tracking-[0.14em] uppercase ${
           isHighRes
             ? "border-[rgba(255,16,42,0.55)] text-[var(--ep-red)]"
-            : "border-[var(--ep-border)] text-[var(--ep-text-muted)]"
+            : tier === "cd"
+              ? "border-[rgba(255,255,255,0.35)] text-[var(--ep-text-secondary)]"
+              : "border-[var(--ep-border)] text-[var(--ep-text-muted)]"
         }`}
         data-testid="quality-badge-compact"
       >
@@ -60,7 +67,7 @@ export function AudioQualityBadge({
         </span>
       ) : (
         <span className="quality-chip rounded-md px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em]">
-          {isHighRes ? "HI-RES" : "STANDARD"}
+          {tier === "studio" ? "STUDIO" : isHighRes ? "HI-RES" : tier === "cd" ? "CD QUALITY" : tier === "lossless" ? "LOSSLESS" : tier === "lossy" ? "COMPRESSED" : "STANDARD"}
         </span>
       )}
       {chips.map((chip) => (
