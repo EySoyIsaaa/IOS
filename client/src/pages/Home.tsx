@@ -191,6 +191,7 @@ export default function Home() {
   const crossfade = useCrossfade();
   const { t, language, setLanguage } = useLanguage();
   const { theme, toggleTheme, switchable } = useTheme();
+  // Keep this as the single safeLibrary declaration, before usePlaylists.
   const safeLibrary = useMemo(() => {
     if (!Array.isArray(queue.library)) return [];
     return queue.library
