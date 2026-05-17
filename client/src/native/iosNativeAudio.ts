@@ -222,4 +222,4 @@ export interface EpicenterNativePlugin {
 }
 
 export const EpicenterNative =
-  registerPlugin<EpicenterNativePlugin>("EpicenterNative");
+  registerPlugin<EpicenterNativePlugin>('EpicenterNative');

@@ -26,6 +26,7 @@ final class NativeQueueManager {
             return
         }
         currentIndex = min(max(startIndex, 0), trackIds.count - 1)
+        print("[NativeQueue] currentIndex=\(currentIndex) currentTrackId=\(currentTrackId ?? "nil")")
     }
 
     func setCurrentTrackId(_ trackId: String) {
@@ -35,6 +36,15 @@ final class NativeQueueManager {
             trackIds = [trackId]
             currentIndex = 0
         }
+    }
+
+    func setCurrentIndex(_ index: Int) {
+        guard !trackIds.isEmpty else {
+            currentIndex = 0
+            return
+        }
+        currentIndex = min(max(index, 0), trackIds.count - 1)
+        print("[NativeQueue] currentIndex=\(currentIndex) currentTrackId=\(currentTrackId ?? "nil")")
     }
 
     func moveNext() -> String? {

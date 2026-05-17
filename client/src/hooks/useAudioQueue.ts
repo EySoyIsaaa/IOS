@@ -339,30 +339,20 @@ export function useAudioQueue(): QueueController {
   }, []);
 
   const nextTrack = useCallback(() => {
-    const before = currentTrackIndex;
-    const after = before < queue.length - 1 ? before + 1 : before;
-    console.info("[Queue] next requested", {
-      before,
-      after,
+    console.info("[Queue] next requested via native authority", {
+      currentIndex: currentTrackIndex,
       queueLength: queue.length,
     });
-    if (after !== before) {
-      moveToQueueIndex(after, "next");
-    }
-  }, [currentTrackIndex, moveToQueueIndex, queue.length]);
+    void EpicenterNative.next();
+  }, [currentTrackIndex, queue.length]);
 
   const previousTrack = useCallback(() => {
-    const before = currentTrackIndex;
-    const after = before > 0 ? before - 1 : before;
-    console.info("[Queue] previous requested", {
-      before,
-      after,
+    console.info("[Queue] previous requested via native authority", {
+      currentIndex: currentTrackIndex,
       queueLength: queue.length,
     });
-    if (after !== before) {
-      moveToQueueIndex(after, "previous");
-    }
-  }, [currentTrackIndex, moveToQueueIndex, queue.length]);
+    void EpicenterNative.previous();
+  }, [currentTrackIndex, queue.length]);
 
   const syncCurrentTrackById = useCallback(
     (trackId: string) => {

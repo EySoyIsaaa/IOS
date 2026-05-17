@@ -322,8 +322,6 @@ export function useIosNativeAudioProcessor() {
       const state = await EpicenterNative.pause();
       applyState(state);
     } catch (error) {
-      if (requestId === nativeTransitionRequestRef.current)
-        setIsNativeTransitionInProgress(false);
       reportError(error);
     }
   }, [applyState, reportError]);
@@ -345,8 +343,6 @@ export function useIosNativeAudioProcessor() {
       const state = await EpicenterNative.stop();
       applyState(state);
     } catch (error) {
-      if (requestId === nativeTransitionRequestRef.current)
-        setIsNativeTransitionInProgress(false);
       reportError(error);
     }
   }, [applyState, reportError]);

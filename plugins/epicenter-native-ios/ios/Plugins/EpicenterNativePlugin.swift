@@ -122,11 +122,13 @@ public class EpicenterNativePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func next(_ call: CAPPluginCall) {
-        call.resolve(playbackController.next())
+        NSLog("[Bridge] next command received")
+        call.resolve(playbackController.next(source: "bridge"))
     }
 
     @objc func previous(_ call: CAPPluginCall) {
-        call.resolve(playbackController.previous())
+        NSLog("[Bridge] previous command received")
+        call.resolve(playbackController.previous(source: "bridge"))
     }
 
     @objc func setEpicenterEnabled(_ call: CAPPluginCall) {
