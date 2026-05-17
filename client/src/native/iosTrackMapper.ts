@@ -21,7 +21,6 @@ export interface IOSAppTrack {
   sampleRate?: number;
   bitrate?: number;
   isHiRes?: boolean;
-  qualityClass?: AudioQualityClass;
   sourceUri?: string;
   sourceType?: "manual-ios";
   albumArtUri?: string;

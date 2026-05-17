@@ -1,3 +1,4 @@
+import React from "react";
 import {
   ChevronRight,
   Disc3,
@@ -25,6 +26,38 @@ import type {
   HomeTrackActions,
   TranslateFn,
 } from "@/components/home/types";
+
+const isRenderableTrack = (track: Track | null | undefined): track is Track =>
+  !!track && typeof track.id === "string" && track.id.trim().length > 0;
+
+class SongsLibraryScreenErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("[SongsScreen] render state", {
+      message: error.message,
+      stack: error.stack,
+      componentStack: info.componentStack,
+    });
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="rounded-2xl border border-red-500/30 bg-red-950/20 p-4 text-sm text-red-100">
+        No se pudo renderizar la lista de canciones. Intenta recargar la
+        biblioteca.
+      </div>
+    );
+  }
+}
 
 interface HomeLibraryViewProps
   extends HomeTrackActions,
@@ -495,81 +528,97 @@ export function HomeLibraryView({
         )}
 
         {libraryView === "songs" && (
-          <div className="p-4 space-y-1">
-            {sortedSongs.length > 0 && (
-              <>
-                <div className="flex flex-wrap items-center gap-3 mb-4">
-                  <button
-                    onClick={() => onPlayInOrder(sortedSongs)}
-                    className="flex items-center gap-2 px-5 py-2 rounded-full bg-[var(--ep-red)] text-white font-semibold shadow-sm"
-                  >
-                    <Play className="w-4 h-4" fill="currentColor" />
-                    {t("actions.play")}
-                  </button>
-                  <button
-                    onClick={() => onShufflePlay(sortedSongs)}
-                    className="flex items-center gap-2 px-5 py-2 rounded-full border border-[var(--ep-border)] text-white"
-                  >
-                    <Shuffle className="w-4 h-4" />
-                    {t("library.shuffle")}
-                  </button>
-                </div>
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="text-xs text-zinc-500">
-                    {t("library.sortBy")}
-                  </span>
-                  {(["default", "name", "artist"] as const).map((sortKey) => (
+          <SongsLibraryScreenErrorBoundary>
+            <div className="p-4 space-y-1">
+              {sortedSongs.length > 0 && (
+                <>
+                  <div className="flex flex-wrap items-center gap-3 mb-4">
                     <button
-                      key={sortKey}
-                      onClick={() => setSongSort(sortKey)}
-                      className={`px-3 py-1 rounded-full text-xs ${
-                        songSort === sortKey
-                          ? "bg-[var(--ep-red)] text-white"
-                          : "bg-[#0b0b0b] text-[var(--ep-text-secondary)] border border-[var(--ep-border)]"
-                      }`}
+                      onClick={() => onPlayInOrder(sortedSongs)}
+                      className="flex items-center gap-2 px-5 py-2 rounded-full bg-[var(--ep-red)] text-white font-semibold shadow-sm"
                     >
-                      {sortKey === "default"
-                        ? t("library.sortDefault")
-                        : sortKey === "name"
-                          ? t("library.sortName")
-                          : t("library.sortArtist")}
+                      <Play className="w-4 h-4" fill="currentColor" />
+                      {t("actions.play")}
                     </button>
-                  ))}
+                    <button
+                      onClick={() => onShufflePlay(sortedSongs)}
+                      className="flex items-center gap-2 px-5 py-2 rounded-full border border-[var(--ep-border)] text-white"
+                    >
+                      <Shuffle className="w-4 h-4" />
+                      {t("library.shuffle")}
+                    </button>
+                  </div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="text-xs text-zinc-500">
+                      {t("library.sortBy")}
+                    </span>
+                    {(["default", "name", "artist"] as const).map((sortKey) => (
+                      <button
+                        key={sortKey}
+                        onClick={() => setSongSort(sortKey)}
+                        className={`px-3 py-1 rounded-full text-xs ${
+                          songSort === sortKey
+                            ? "bg-[var(--ep-red)] text-white"
+                            : "bg-[#0b0b0b] text-[var(--ep-text-secondary)] border border-[var(--ep-border)]"
+                        }`}
+                      >
+                        {sortKey === "default"
+                          ? t("library.sortDefault")
+                          : sortKey === "name"
+                            ? t("library.sortName")
+                            : t("library.sortArtist")}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              {sortedSongs.length > 0 && (
+                <p className="text-xs text-zinc-600 text-center mb-3 px-4">
+                  {t("library.swipeHint")}
+                </p>
+              )}
+              {sortedSongs
+                .slice(0, visibleSongsCount)
+                .filter((track) => {
+                  const valid = isRenderableTrack(track);
+                  if (!valid)
+                    console.warn("[SongsScreen] invalid track skipped", {
+                      track,
+                    });
+                  return valid;
+                })
+                .map((track, index) => (
+                  <SwipeableTrackItem
+                    key={
+                      track.id ||
+                      track.sourceTrackId ||
+                      `${track.title}-${index}`
+                    }
+                    track={track}
+                    onPlayNow={onPlayNow}
+                    onAddToQueue={onAddToQueue}
+                    onPlayNext={onPlayNext}
+                    onAddToPlaylist={onOpenAddToPlaylist}
+                    onPersistTrack={onPersistEphemeralTrack}
+                  />
+                ))}
+              {visibleSongsCount < sortedSongs.length && (
+                <div className="py-4 text-center">
+                  <button
+                    onClick={() => setVisibleSongsCount((prev) => prev + 250)}
+                    className="px-4 py-2 rounded-full bg-zinc-900 text-zinc-200 text-sm"
+                  >
+                    {t("library.loadMoreSongs", {
+                      count: Math.min(
+                        250,
+                        sortedSongs.length - visibleSongsCount,
+                      ),
+                    })}
+                  </button>
                 </div>
-              </>
-            )}
-            {sortedSongs.length > 0 && (
-              <p className="text-xs text-zinc-600 text-center mb-3 px-4">
-                {t("library.swipeHint")}
-              </p>
-            )}
-            {sortedSongs.slice(0, visibleSongsCount).map((track) => (
-              <SwipeableTrackItem
-                key={track.id}
-                track={track}
-                onPlayNow={onPlayNow}
-                onAddToQueue={onAddToQueue}
-                onPlayNext={onPlayNext}
-                onAddToPlaylist={onOpenAddToPlaylist}
-                onPersistTrack={onPersistEphemeralTrack}
-              />
-            ))}
-            {visibleSongsCount < sortedSongs.length && (
-              <div className="py-4 text-center">
-                <button
-                  onClick={() => setVisibleSongsCount((prev) => prev + 250)}
-                  className="px-4 py-2 rounded-full bg-zinc-900 text-zinc-200 text-sm"
-                >
-                  {t("library.loadMoreSongs", {
-                    count: Math.min(
-                      250,
-                      sortedSongs.length - visibleSongsCount,
-                    ),
-                  })}
-                </button>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          </SongsLibraryScreenErrorBoundary>
         )}
 
         {libraryView === "hires" && (
