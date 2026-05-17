@@ -10,7 +10,15 @@ constexpr float EPICENTER_INTENSITY_HEADROOM = 0.75f;
 constexpr float EPICENTER_INTENSITY_MAX_SCALE = 0.65f;
 constexpr float EPICENTER_VOLUME_MAX_SCALE = 0.75f;
 constexpr float EPICENTER_OUTPUT_TRIM = 0.95f;
-constexpr float DEEP_EXTENSION_AMOUNT = 0.18f;
+constexpr float SUB_DEPTH = 1.0f;
+constexpr float DEEP_EXTENSION_AMOUNT = 0.30f;
+constexpr float SYNTH_DEPTH_GAIN = 1.12f;
+constexpr float GATE_DETECTOR_FLOOR = 0.38f;
+constexpr float GATE_DETECTOR_AUTHORITY = 0.18f;
+constexpr float OUTPUT_DC_HIGHPASS_HZ = 28.0f;
+constexpr float DEEP_EXTENSION_SUBSONIC_HIGHPASS_HZ = 23.0f;
+constexpr float DEEP_EXTENSION_MIX_BASE = 0.42f;
+constexpr float DEEP_EXTENSION_MIX_VOICE = 0.52f;
 
 inline float clampf(float v, float lo, float hi) { return std::max(lo, std::min(v, hi)); }
 inline float denormalFloor(float v) { return (std::fabs(v) < DENORMAL_FLOOR || !std::isfinite(v)) ? 0.0f : v; }
@@ -140,6 +148,20 @@ EpicenterDSPParameters EpicenterDSPCore::parameters() const {
     return { enabled_.load(), intensity_.load(), sweepFreq_.load(), width_.load(), balance_.load(), volume_.load() };
 }
 
+EpicenterDSPCalibration EpicenterDSPCore::calibration() const {
+    return {
+        SUB_DEPTH,
+        DEEP_EXTENSION_AMOUNT,
+        SYNTH_DEPTH_GAIN,
+        GATE_DETECTOR_FLOOR,
+        GATE_DETECTOR_AUTHORITY,
+        OUTPUT_DC_HIGHPASS_HZ,
+        DEEP_EXTENSION_SUBSONIC_HIGHPASS_HZ,
+        DEEP_EXTENSION_MIX_BASE,
+        DEEP_EXTENSION_MIX_VOICE,
+    };
+}
+
 void EpicenterDSPCore::process(float* const* channels, int channelCount, std::size_t frameCount) {
     if (!channels || channelCount <= 0 || frameCount == 0) return;
     const auto params = parameters();
@@ -159,7 +181,7 @@ void EpicenterDSPCore::process(float* const* channels, int channelCount, std::si
 EpicenterDSPCore::DerivedFrequencies EpicenterDSPCore::getDerivedFrequencies(float sweepFreq, float width) const {
     const float sweepNorm = (clampf(sweepFreq, 27, 63) - 27.0f) / 36.0f;
     const float widthNorm = clampf(width, 0, 100) / 100.0f;
-    return {55 + sweepNorm * 10, 75 + sweepNorm * 10, 100 + sweepNorm * 15, 105 + widthNorm * 30, 95 + sweepNorm * 20, 58 + widthNorm * 10, 48 + widthNorm * 8, 16 + sweepNorm * 4, 34 + widthNorm * 5};
+    return {55 + sweepNorm * 10, 75 + sweepNorm * 10, 100 + sweepNorm * 15, 105 + widthNorm * 30, 95 + sweepNorm * 20, 56 + widthNorm * 8, 48 + widthNorm * 8, 16 + sweepNorm * 4, 30 + widthNorm * 10};
 }
 
 EpicenterDSPCore::ChannelState EpicenterDSPCore::createChannelState(const DerivedFrequencies& d) {
@@ -171,7 +193,7 @@ EpicenterDSPCore::ChannelState EpicenterDSPCore::createChannelState(const Derive
     s.lowMidDip.prepare(sampleRate_, BiquadFilter::Type::Bandpass, d.bodyHz * 1.18f, 1.1f);
     s.subLowpass.prepare(sampleRate_, BiquadFilter::Type::Lowpass, d.subTopHz, 0.707f);
     s.bassBoostShelf.prepare(sampleRate_);
-    s.outputDcHighpass.prepare(sampleRate_, BiquadFilter::Type::Highpass, 32.0f, 0.707f);
+    s.outputDcHighpass.prepare(sampleRate_, BiquadFilter::Type::Highpass, OUTPUT_DC_HIGHPASS_HZ, 0.707f);
     s.voiceEnv.prepare(sampleRate_, 6, 110);
     return s;
 }
@@ -186,7 +208,7 @@ EpicenterDSPCore::MonoState EpicenterDSPCore::createMonoState(const DerivedFrequ
     s.synthHighpass.prepare(sampleRate_, BiquadFilter::Type::Highpass, d.synthHighHz, 0.707f);
     s.synthLowpass.prepare(sampleRate_, BiquadFilter::Type::Lowpass, d.synthLowHz, 0.707f);
     s.deepExtensionLowpass.prepare(sampleRate_, BiquadFilter::Type::Lowpass, d.deepExtensionHz, 0.707f);
-    s.deepExtensionSubsonicHighpass.prepare(sampleRate_, BiquadFilter::Type::Highpass, 24, 0.707f);
+    s.deepExtensionSubsonicHighpass.prepare(sampleRate_, BiquadFilter::Type::Highpass, DEEP_EXTENSION_SUBSONIC_HIGHPASS_HZ, 0.707f);
     s.detectorEnv.prepare(sampleRate_, 7, 95); s.monoEnv.prepare(sampleRate_, 12, 160); s.diffEnv.prepare(sampleRate_, 12, 160);
     s.gateEnv.prepare(sampleRate_, 25, 240); s.synthLevelEnv.prepare(sampleRate_, 18, 180); s.deepExtensionEnv.prepare(sampleRate_, 24, 420);
     return s;
@@ -218,7 +240,9 @@ float EpicenterDSPCore::computeGate(float monoEnv, float diffEnv, float weighted
     const float musicRatio = diffEnv / (monoEnv + 1.0e-6f);
     const float detectorActivity = std::min(1.0f, weightedDetectorEnv * 9.5f);
     const float musicScore = clampf(musicRatio * 3.2f, 0, 1);
-    return detectorActivity * (0.25f + musicScore * 0.75f);
+    const float musicalGate = detectorActivity * (GATE_DETECTOR_FLOOR + musicScore * (1.0f - GATE_DETECTOR_FLOOR));
+    const float detectorSustain = std::max(0.0f, detectorActivity - 0.55f) * GATE_DETECTOR_AUTHORITY;
+    return std::min(1.0f, std::max(musicalGate, detectorSustain));
 }
 
 void EpicenterDSPCore::processChunk(float* const* input, int channelCount, std::size_t blockSize, const EpicenterDSPParameters& p) {
@@ -231,7 +255,7 @@ void EpicenterDSPCore::processChunk(float* const* input, int channelCount, std::
     const float volumeGain = clampf((p.volume / 100.0f) * EPICENTER_VOLUME_MAX_SCALE, 0, 1);
     const float bassBoostFreqHz = 48 + widthNorm * 8;
     const float bassBoostGainDb = intensityScaledNorm * 7.4f;
-    const float synthAmount = (0.42f + intensityNorm * 1.2f) * 1.15f;
+    const float synthAmount = (0.42f + intensityNorm * 1.2f) * 1.15f * SYNTH_DEPTH_GAIN;
     const float bassProgramAmount = 0.58f + balanceNorm * 0.26f;
     const float lowMidBodyAmount = 0.12f + balanceNorm * 0.08f;
     const float lowMidDipAmount = (0.08f + intensityNorm * 0.16f) * (0.45f + widthNorm * 0.3f);
@@ -279,7 +303,7 @@ void EpicenterDSPCore::processChunk(float* const* input, int channelCount, std::
             const float body = s.lowMidBody.process(sample);
             const float dip = s.lowMidDip.process(sample);
             const float shapedBassProgram = bassProgram * bassProgramAmount + body * lowMidBodyAmount * (0.45f + voiceProtection * 0.55f) - dip * lowMidDipAmount;
-            const float generatedSub = s.subLowpass.process(subBuffer_[i]) * (0.48f + voiceProtection * 0.62f) + deepExtensionBuffer_[i] * (0.32f + voiceProtection * 0.42f);
+            const float generatedSub = s.subLowpass.process(subBuffer_[i]) * (0.48f + voiceProtection * 0.62f) + deepExtensionBuffer_[i] * (DEEP_EXTENSION_MIX_BASE + voiceProtection * DEEP_EXTENSION_MIX_VOICE);
             float mixed = cleanVoicePath + shapedBassProgram + generatedSub;
             mixed = s.bassBoostShelf.process(mixed);
             const float protectionGain = 0.94f + voiceProtection * 0.06f;

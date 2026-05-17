@@ -15,6 +15,18 @@ struct EpicenterDSPParameters {
     float volume = 100.0f;
 };
 
+struct EpicenterDSPCalibration {
+    float subDepth = 1.0f;
+    float deepExtensionAmount = 0.30f;
+    float synthDepthGain = 1.12f;
+    float gateDetectorFloor = 0.38f;
+    float gateDetectorAuthority = 0.18f;
+    float outputDcHighpassHz = 28.0f;
+    float deepExtensionSubsonicHighpassHz = 23.0f;
+    float deepExtensionMixBase = 0.42f;
+    float deepExtensionMixVoice = 0.52f;
+};
+
 class BiquadFilter {
 public:
     enum class Type { Lowpass, Highpass, Bandpass };
@@ -61,6 +73,7 @@ public:
     void setEnabled(bool enabled);
     void setParameters(float intensity, float sweepFreq, float width, float balance, float volume);
     EpicenterDSPParameters parameters() const;
+    EpicenterDSPCalibration calibration() const;
     void process(float* const* channels, int channelCount, std::size_t frameCount);
 private:
     struct ChannelState {

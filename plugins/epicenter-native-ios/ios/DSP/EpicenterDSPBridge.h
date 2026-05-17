@@ -9,6 +9,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setIntensity:(float)intensity sweepFreq:(float)sweepFreq width:(float)width balance:(float)balance volume:(float)volume;
 - (void)processLeft:(float *)left right:(nullable float *)right frameCount:(NSInteger)frameCount;
 - (NSDictionary<NSString *, id> *)stateDictionary;
+- (NSDictionary<NSString *, id> *)calibrationDictionary;
 @end
 
 NS_ASSUME_NONNULL_END

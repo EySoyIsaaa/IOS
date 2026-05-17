@@ -39,4 +39,19 @@
     };
 }
 
+- (NSDictionary<NSString *, id> *)calibrationDictionary {
+    const auto calibration = _core.calibration();
+    return @{
+        @"subDepth": @(calibration.subDepth),
+        @"deepExtensionAmount": @(calibration.deepExtensionAmount),
+        @"synthDepthGain": @(calibration.synthDepthGain),
+        @"gateDetectorFloor": @(calibration.gateDetectorFloor),
+        @"gateDetectorAuthority": @(calibration.gateDetectorAuthority),
+        @"outputDcHighpassHz": @(calibration.outputDcHighpassHz),
+        @"deepExtensionSubsonicHighpassHz": @(calibration.deepExtensionSubsonicHighpassHz),
+        @"deepExtensionMixBase": @(calibration.deepExtensionMixBase),
+        @"deepExtensionMixVoice": @(calibration.deepExtensionMixVoice)
+    };
+}
+
 @end

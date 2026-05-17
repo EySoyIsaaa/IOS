@@ -7,10 +7,10 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { EpicenterNative, type IOSNativeTrack } from '@/native/iosNativeAudio';
-import { isHiResQuality } from '@shared/audioQuality';
+import { EpicenterNative } from '@/native/iosNativeAudio';
+import { nativeTrackToAppTrack, type IOSAppTrack } from '@/native/iosTrackMapper';
 
-export interface Track {
+export interface Track extends IOSAppTrack {
   id: string;
   sourceTrackId?: string;
   file?: File;
@@ -91,24 +91,8 @@ export interface QueueController {
 
 const DEFAULT_PAGE_SIZE = 1000;
 
-const nativeTrackToTrack = (track: IOSNativeTrack): Track => ({
-  id: track.id,
-  fileName: track.fileName,
-  fileType: track.fileExtension ? `audio/${track.fileExtension}` : undefined,
-  fileSize: track.sizeBytes,
-  title: track.title || track.fileName || 'Untitled',
-  artist: track.artist || 'Unknown Artist',
-  duration: Math.max(0, Math.round((track.durationMs || 0) / 1000)),
-  coverUrl: track.albumArtUri || undefined,
-  bitDepth: track.bitDepth ?? undefined,
-  sampleRate: track.sampleRate ?? undefined,
-  bitrate: track.bitrate ?? undefined,
-  isHiRes: isHiResQuality(track.bitDepth ?? undefined, track.sampleRate ?? undefined),
-  sourceUri: track.sourceUri,
-  sourceType: 'manual-ios',
-  albumArtUri: track.albumArtUri ?? undefined,
-  unavailable: !track.isAvailable,
-});
+const nativeTrackToTrack = nativeTrackToAppTrack;
+
 
 const setNativeQueue = async (tracks: Track[], startIndex: number) => {
   if (tracks.length === 0) return;

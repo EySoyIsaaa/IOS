@@ -82,7 +82,7 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
         let albumArtUri = try saveArtworkIfPresent(metadata.artworkData, stableId: stableId)
         let fileName = copiedURL.lastPathComponent
         let fileExtension = copiedURL.pathExtension.lowercased()
-        let fallbackTitle = copiedURL.deletingPathExtension().lastPathComponent
+        let fallbackTitle = sourceURL.deletingPathExtension().lastPathComponent
 
         return NativeTrack(
             id: UUID().uuidString,

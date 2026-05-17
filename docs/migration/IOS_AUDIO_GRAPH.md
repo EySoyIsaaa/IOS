@@ -38,3 +38,25 @@ Por eso se usa `AVAudioSourceNode`: el archivo se decodifica a `AVAudioPCMBuffer
 ## Pendiente para fases futuras
 
 No se agregó EQ nativo, Reverb ni Concert Hall en esta fase. Si se implementan después, deben insertarse después del Epicenter o en un pipeline explícito documentado sin modificar el carácter de este port.
+
+## Calibración de profundidad y logging
+
+La calibración de profundidad vive dentro de `EpicenterDSPCore` y no cambia el grafo de audio. El render block sigue siendo:
+
+```text
+AVAudioSourceNode render block
+→ copia de frames PCM ya decodificados
+→ EpicenterDSPBridge.processLeft/right
+→ EpicenterDSPCore.process()
+→ mainMixerNode
+```
+
+Se agregó un log fuera del callback de audio al preparar el nodo:
+
+```text
+[iOS Epicenter DSP] depth calibration constants ...
+```
+
+Ese log se emite en `configureSourceNode(format:)`, no dentro del loop de render ni por buffer. Los cambios de profundidad mantienen las mismas restricciones de tiempo real: no SQLite, no I/O, no allocations DSP en `process()` y sin logs dentro del callback.
+
+La protección anti-rumble se mantiene con dos etapas: HPF subsónico dedicado en la deep extension a 23 Hz y DC/high-pass final por canal a 28 Hz. Seek, stop y cambio de canción siguen reseteando el estado DSP para evitar que envelopes o filtros de un fragmento anterior dejen rumble residual.

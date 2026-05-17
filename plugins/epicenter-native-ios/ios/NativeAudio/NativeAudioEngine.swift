@@ -256,6 +256,7 @@ final class NativeAudioEngine {
         engine.connect(node, to: engine.mainMixerNode, format: format)
         epicenterDSP.prepare(withSampleRate: format.sampleRate, channelCount: Int(format.channelCount), maxFrames: 8192)
         print("[iOS Epicenter DSP] prepared sampleRate=\(format.sampleRate) channels=\(format.channelCount)")
+        print("[iOS Epicenter DSP] depth calibration constants \(epicenterDSP.calibrationDictionary())")
     }
 
     private func scheduleSegment(from frame: AVAudioFramePosition) throws -> Bool {

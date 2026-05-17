@@ -58,3 +58,22 @@ Implementación nativa:
 - El core nativo clampa NaN/Inf y salida final a `[-1,1]`; esto es protección de plataforma y no cambia la intención sonora.
 - El AudioWorklet podía recibir buffers arbitrarios y redimensionar `Float32Array`; el core nativo preasigna `8192` frames y procesa chunks para mantener cero allocations en el render.
 - El grafo iOS usa `AVAudioSourceNode` con audio decodificado en memoria para poder insertar DSP in-place en tiempo real sin reintroducir WebAudio. La arquitectura está documentada en `IOS_AUDIO_GRAPH.md`.
+
+## Calibración de profundidad subgrave (fase posterior al primer port)
+
+El primer port nativo fue deliberadamente conservador. En escucha comparativa con la ruta WebAudio/Worklet, iOS recuperaba el carácter del efecto pero con menor sensación de subgrave profundo. Esta fase agrega un modo interno de calibración `subDepth` sin exponer UI nueva y sin convertir el algoritmo en un bass boost genérico.
+
+Cambios aplicados en el core C++:
+
+| Área | Valor primer port | Valor calibrado | Motivo | Protección mantenida |
+|---|---:|---:|---|---|
+| `DEEP_EXTENSION_AMOUNT` | `0.18` | `0.30` | Recupera más energía 30–40 Hz desde la capa derivada, no desde EQ. | La capa sigue pasando por soft clip, envelope sustain y HPF subsónico. |
+| `SYNTH_DEPTH_GAIN` | N/A | `1.12` | Eleva `synthAmount` un 12%, dentro del rango pedido de +8% a +15%. | Conserva gate, `protectedSynth` y soft clip. |
+| Mezcla deep extension | `0.32 + voiceProtection * 0.42` | `0.42 + voiceProtection * 0.52` | Aumenta peso de la capa profunda sin inflar 50–80 Hz. | La mezcla depende de `voiceProtection`, por lo que voces/presencia siguen reduciendo riesgo de embarrar. |
+| `computeGate()` | Piso musical `0.25` | Piso `0.38` + autoridad detector `0.18` cuando hay detector fuerte | El bajo profundo suele ser centrado/mono; el gate ya no depende tanto de `diffEnv / monoEnv` cuando `detectorEnv` es claro. | El gate sigue multiplicado por `detectorActivity`, por lo que no abre sin bajo detectado. |
+| `outputDcHighpass` | `32 Hz` | `28 Hz` | Deja pasar algo más de profundidad audible. | Sigue bloqueando DC/infrasonido. |
+| `deepExtensionSubsonicHighpass` | `24 Hz` | `23 Hz` | Ajuste leve para profundidad sin liberar infrasonido peligroso. | Mantiene HPF subsónico dedicado antes de la mezcla. |
+| `deepExtensionHz` derivado | `34–39 Hz` | `30–40 Hz` | La extensión profunda trabaja más abajo, en la zona percibida como profundidad. | No sube agresivamente a 50–80 Hz, evitando carácter de bass boost. |
+| `subTopHz` derivado | `58–68 Hz` | `56–64 Hz` | Mantiene la ruta sub principal enfocada y evita exceso de golpe medio. | La reconstrucción sigue filtrada por `subLowpass`. |
+
+La salida con `enabled=false` permanece en bypass limpio: el core no aplica filtros, ganancia ni calibración tonal y solo sanea denormals/NaN por seguridad.
