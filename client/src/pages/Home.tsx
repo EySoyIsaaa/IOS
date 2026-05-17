@@ -270,20 +270,6 @@ export default function Home() {
   const nextPrefetchKeyRef = useRef<string | null>(null);
   const mediaStoreReconciledRef = useRef(false);
   const lastPositionSyncRef = useRef(0);
-
-  const safeLibrary = useMemo(() => {
-    if (!Array.isArray(queue.library)) return [];
-    return queue.library
-      .map((track) => normalizeLibraryTrack(track))
-      .filter((track): track is Track => {
-        if (!track?.id) {
-          console.warn("[SongsScreen] invalid track skipped", { track });
-          return false;
-        }
-        return true;
-      });
-  }, [queue.library]);
-
   const hiResTracks = useMemo(
     () => safeLibrary.filter((track) => track.isHiRes),
     [safeLibrary],
