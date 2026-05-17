@@ -35,6 +35,11 @@ const formatEqLabel = (frequency: number) => {
   return `${Number.isInteger(khz) ? khz.toFixed(0) : khz.toString()} kHz`;
 };
 
+const EQ_GAIN_MIN = -8;
+const EQ_GAIN_MAX = 8;
+
+const clampEqGain = (gain: number) => Math.max(EQ_GAIN_MIN, Math.min(EQ_GAIN_MAX, gain));
+
 const DEFAULT_EQ_BANDS: EqBand[] = EQ_FREQUENCIES.map((frequency) => ({
   frequency,
   label: formatEqLabel(frequency),
@@ -179,13 +184,14 @@ export function useIosNativeAudioProcessor() {
   }, [applyState, reportError]);
 
   const setEqBandGain = useCallback((index: number, gain: number) => {
-    setEqBands((prev) => prev.map((band, bandIndex) => bandIndex === index ? { ...band, gain } : band));
-    void EpicenterNative.setEqBand({ index, gain }).catch(reportError);
+    const clampedGain = clampEqGain(gain);
+    setEqBands((prev) => prev.map((band, bandIndex) => bandIndex === index ? { ...band, gain: clampedGain } : band));
+    void EpicenterNative.setEqBand({ index, gain: clampedGain }).catch(reportError);
   }, [reportError]);
 
   useEffect(() => {
     if (!eqEnabled) return;
-    void EpicenterNative.setEqBands({ gains: eqBands.map((band) => band.gain) }).catch(reportError);
+    void EpicenterNative.setEqBands({ gains: eqBands.map((band) => clampEqGain(band.gain)) }).catch(reportError);
   }, [eqBands, eqEnabled, reportError]);
 
   const setEpicenterEnabled = useCallback((enabled: boolean) => {
@@ -201,7 +207,7 @@ export function useIosNativeAudioProcessor() {
   const setEqEnabled = useCallback((enabled: boolean) => {
     setEqEnabledState(enabled);
     void EpicenterNative.setEqEnabled({ enabled }).catch(reportError);
-    if (enabled) void EpicenterNative.setEqBands({ gains: eqBands.map((band) => band.gain) }).catch(reportError);
+    if (enabled) void EpicenterNative.setEqBands({ gains: eqBands.map((band) => clampEqGain(band.gain)) }).catch(reportError);
   }, [eqBands, reportError]);
 
   const setReverbEnabled = useCallback((enabled: boolean) => {

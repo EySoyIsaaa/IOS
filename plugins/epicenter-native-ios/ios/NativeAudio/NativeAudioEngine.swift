@@ -30,8 +30,8 @@ final class NativeAudioEngine {
         800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000,
         12500, 16000, 20000,
     ]
-    private static let eqGainRange: ClosedRange<Float> = -12...12
-    private static let maxHeadroomDb: Float = 12
+    private static let eqGainRange: ClosedRange<Float> = -8...8
+    private static let maxHeadroomDb: Float = 10
     private static let maxNativeReverbWetDryMix: Float = 55
     private static let maxConcertHallWetDryMix: Float = 45
 
@@ -342,7 +342,7 @@ final class NativeAudioEngine {
         let maxBoost = positiveGains.max() ?? 0
         let averageBoost = positiveGains.reduce(0, +) / Float(positiveGains.count)
         let density = Float(positiveGains.count) / Float(eqGains.count)
-        return min(NativeAudioEngine.maxHeadroomDb, (maxBoost * 0.55) + (averageBoost * density * 0.45))
+        return min(8.0, (maxBoost * 0.45) + (averageBoost * density * 0.35))
     }
 
     private func eqState(extra: [String: Any] = [:]) -> [String: Any] {

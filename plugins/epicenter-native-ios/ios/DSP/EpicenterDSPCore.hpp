@@ -17,14 +17,14 @@ struct EpicenterDSPParameters {
 
 struct EpicenterDSPCalibration {
     float subDepth = 1.0f;
-    float deepExtensionAmount = 0.30f;
-    float synthDepthGain = 1.12f;
-    float gateDetectorFloor = 0.38f;
-    float gateDetectorAuthority = 0.18f;
-    float outputDcHighpassHz = 28.0f;
+    float deepExtensionAmount = 0.36f;
+    float synthDepthGain = 1.18f;
+    float gateDetectorFloor = 0.40f;
+    float gateDetectorAuthority = 0.22f;
+    float outputDcHighpassHz = 26.0f;
     float deepExtensionSubsonicHighpassHz = 23.0f;
-    float deepExtensionMixBase = 0.42f;
-    float deepExtensionMixVoice = 0.52f;
+    float deepExtensionMixBase = 0.46f;
+    float deepExtensionMixVoice = 0.58f;
 };
 
 class BiquadFilter {

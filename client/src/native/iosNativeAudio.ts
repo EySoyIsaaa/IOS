@@ -11,6 +11,7 @@ export interface IOSNativeTrack {
   durationMs: number;
   fileName: string;
   fileExtension: string;
+  codec?: string | null;
   sourceUri: string;
   bookmarkData?: string | null;
   localFilePath?: string | null;

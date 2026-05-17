@@ -8,7 +8,7 @@ La reproducción nativa sigue centralizada en `NativePlaybackController` y `Nati
 
 ```text
 AVAudioFile local
-→ AVAudioPlayerNode
+→ AVAudioSourceNode
 → etapa Epicenter nativa existente
 → AVAudioUnitEQ 31 bandas
 → AVAudioUnitReverb Reverb

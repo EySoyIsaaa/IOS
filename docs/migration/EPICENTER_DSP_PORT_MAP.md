@@ -77,3 +77,19 @@ Cambios aplicados en el core C++:
 | `subTopHz` derivado | `58–68 Hz` | `56–64 Hz` | Mantiene la ruta sub principal enfocada y evita exceso de golpe medio. | La reconstrucción sigue filtrada por `subLowpass`. |
 
 La salida con `enabled=false` permanece en bypass limpio: el core no aplica filtros, ganancia ni calibración tonal y solo sanea denormals/NaN por seguridad.
+
+## Ajuste fino de profundidad subgrave (fase EQ ±8 / metadata)
+
+Se revisó la calibración real del core y se reforzó únicamente el DSP Epicenter; no se usó EQ ni FX para simular profundidad. Los cambios mantienen gate musical, soft clip, trim final y bypass limpio.
+
+| Área | Valor v4 | Valor ajuste fino | Motivo | Protección |
+|---|---:|---:|---|---|
+| `DEEP_EXTENSION_AMOUNT` | `0.30` | `0.36` | Más presencia 30–40 Hz desde la capa reconstruida. | Sigue por HPF subsónico, envelope sustain y soft clip. |
+| `SYNTH_DEPTH_GAIN` | `1.12` | `1.18` | Más autoridad del sintetizado sin empujar EQ ni bass boost. | `protectedSynth`, gate y soft clip siguen activos. |
+| Deep mix | `0.42 + voiceProtection * 0.52` | `0.46 + voiceProtection * 0.58` | La capa profunda pesa más cuando la voz deja espacio. | `voiceProtection` reduce mezcla en presencia vocal. |
+| Gate | floor `0.38`, authority `0.18`, sustain desde `0.55` | floor `0.40`, authority `0.22`, sustain desde `0.50` | Abre con más decisión ante bajo centrado/detector fuerte. | Sigue dependiendo de `detectorActivity`; no abre con ruido sin bajo. |
+| Intensity curve | lineal | `pow(intensity, 0.82)` | El efecto se percibe antes de 90–100% y escala más progresivo. | `EPICENTER_INTENSITY_HEADROOM` y `MAX_SCALE` no se aumentan. |
+| Output HPF | `28 Hz` | `26 Hz` | Más profundidad audible sin liberar infrasonido extremo. | DC/subsonic HPF final permanece activo. |
+| Deep HPF | `23 Hz` | `23 Hz` | Sin cambio para no liberar rumble peligroso. | HPF dedicado antes de mezclar deep extension. |
+
+Seek, stop y cambio de canción siguen llamando `epicenterDSP.reset()` desde `NativeAudioEngine`, por lo que no quedan envelopes/rumble residuales entre posiciones o pistas.

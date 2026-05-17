@@ -211,7 +211,7 @@ export function HomePlayerView({
                       <div className="h-11 w-11 flex-none overflow-hidden rounded-lg border border-[var(--ep-border)] bg-[#111]"><TrackArtwork src={item.coverUrl} alt={item.title} iconClassName="h-5 w-5 text-zinc-600" /></div>
                       <div className="min-w-0 flex-1">
                         <p className={`truncate text-sm font-bold ${isCurrent ? "text-white" : "text-[var(--ep-text-secondary)]"}`}>{item.title}</p>
-                        <div className="flex items-center gap-2"><p className="truncate text-xs text-[var(--ep-text-muted)]">{item.artist}</p><AudioQualityBadge bitDepth={item.bitDepth} sampleRate={item.sampleRate} bitrate={item.bitrate} isHiRes={item.isHiRes} compact /></div>
+                        <div className="flex items-center gap-2"><p className="truncate text-xs text-[var(--ep-text-muted)]">{item.artist}</p><AudioQualityBadge bitDepth={item.bitDepth} sampleRate={item.sampleRate} bitrate={item.bitrate} codec={item.codec} fileExtension={item.fileName?.split('.').pop()} isHiRes={item.isHiRes} compact /></div>
                       </div>
                     </button>
                     <button onClick={() => queue.removeFromQueue(item.id)} className="p-2 text-zinc-600 hover:text-[var(--ep-red)]"><X className="h-4 w-4" /></button>
@@ -248,7 +248,7 @@ export function HomePlayerView({
         <div className="mt-4 text-center">
           <h2 className="line-clamp-2 text-2xl font-black leading-tight text-white">{track?.title || t("player.noTrack")}</h2>
           <p className="mt-1 truncate text-sm text-[var(--ep-text-secondary)]">{track?.artist || t("player.addMusic")}</p>
-          {track && <div className="mt-3"><AudioQualityBadge bitDepth={track.bitDepth} sampleRate={track.sampleRate} bitrate={track.bitrate} isHiRes={track.isHiRes} hiResLogoUrl={hiresAudioBadgeUrl} /></div>}
+          {track && <div className="mt-3"><AudioQualityBadge bitDepth={track.bitDepth} sampleRate={track.sampleRate} bitrate={track.bitrate} codec={track.codec} fileExtension={track.fileName?.split('.').pop()} isHiRes={track.isHiRes} hiResLogoUrl={hiresAudioBadgeUrl} /></div>}
         </div>
 
         <div className="mt-4">

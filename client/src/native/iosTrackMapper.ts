@@ -9,6 +9,7 @@ export interface IOSAppTrack {
   isEphemeral?: boolean;
   fileName?: string;
   fileType?: string;
+  codec?: string;
   fileSize?: number;
   title: string;
   artist: string;
@@ -68,12 +69,14 @@ export const nativeTrackToAppTrack = (track: IOSNativeTrack): IOSAppTrack => {
   const sampleRate = numberOrUndefined(track.sampleRate);
   const bitDepth = numberOrUndefined(track.bitDepth);
   const bitrate = numberOrUndefined(track.bitrate);
+  const codec = cleanText(track.codec) || cleanText(track.fileExtension);
   const albumArtUri = cleanText(track.albumArtUri);
 
   return {
     id: track.id,
     fileName,
     fileType: track.fileExtension ? `audio/${track.fileExtension}` : undefined,
+    codec,
     fileSize: numberOrUndefined(track.sizeBytes),
     title,
     artist,
@@ -83,7 +86,7 @@ export const nativeTrackToAppTrack = (track: IOSNativeTrack): IOSAppTrack => {
     bitDepth,
     sampleRate,
     bitrate,
-    isHiRes: isHiResQuality(bitDepth, sampleRate),
+    isHiRes: isHiResQuality(bitDepth, sampleRate, codec, track.fileExtension),
     sourceUri: cleanText(track.sourceUri),
     sourceType: 'manual-ios',
     albumArtUri: albumArtUri ?? undefined,

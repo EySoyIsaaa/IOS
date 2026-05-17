@@ -7,7 +7,7 @@ Esta fase conecta el ecualizador gráfico de 31 bandas y los efectos espaciales 
 ## Orden del grafo
 
 ```text
-AVAudioPlayerNode / archivo local importado
+AVAudioSourceNode / archivo local importado
 → etapa Epicenter nativa existente / playback nativo iOS
 → AVAudioUnitEQ de 31 bandas
 → AVAudioUnitReverb (Reverb)
@@ -30,7 +30,7 @@ Frecuencias configuradas:
 2k, 2.5k, 3.15k, 4k, 5k, 6.3k, 8k, 10k, 12.5k, 16k, 20k
 ```
 
-Cada banda usa filtro paramétrico con ancho de 1/3 de octava. El rango se mantiene en el rango de UI existente, `-12 dB` a `+12 dB`; los valores entrantes se clampéan en nativo.
+Cada banda usa filtro paramétrico con ancho de 1/3 de octava. El rango se mantiene en el rango de UI existente, `-8 dB` a `+8 dB`; los valores entrantes se clampéan en nativo.
 
 ## FX nativos
 
@@ -49,7 +49,7 @@ La protección se aplica en dos puntos:
 1. `eqNode.globalGain` baja automáticamente cuando hay boosts positivos en el EQ.
 2. `mainMixerNode.outputVolume` aplica trim adicional cuando EQ y/o FX están activos.
 
-El trim máximo total es `12 dB`. La fórmula prioriza el boost máximo, la densidad de bandas positivas y el amount de Reverb/Concert Hall. Esto evita clipping obvio con boosts moderados sin ampliar el rango de la UI.
+El trim máximo total es `10 dB`. La fórmula prioriza el boost máximo, la densidad de bandas positivas y el amount de Reverb/Concert Hall. Esto evita clipping obvio con boosts moderados sin ampliar el rango de la UI.
 
 ## API soportada
 

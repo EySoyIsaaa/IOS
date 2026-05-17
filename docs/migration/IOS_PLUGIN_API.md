@@ -40,7 +40,7 @@ Parámetros:
 |---|---|---|
 | `enabled` | boolean | Activa/bypassea el EQ nativo. |
 | `index` | number | Índice de banda `0–30`. |
-| `gain` | number | dB clamp a `-12…+12`. |
+| `gain` | number | dB clamp a `-8…+8`. |
 | `gains` | number[] | Lista de hasta 31 gains; faltantes se rellenan con `0`. |
 | `name` | string opcional | Nombre de preset para trazabilidad de respuesta. |
 
