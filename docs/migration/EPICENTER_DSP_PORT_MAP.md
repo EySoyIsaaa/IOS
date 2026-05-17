@@ -77,3 +77,20 @@ Cambios aplicados en el core C++:
 | `subTopHz` derivado | `58–68 Hz` | `56–64 Hz` | Mantiene la ruta sub principal enfocada y evita exceso de golpe medio. | La reconstrucción sigue filtrada por `subLowpass`. |
 
 La salida con `enabled=false` permanece en bypass limpio: el core no aplica filtros, ganancia ni calibración tonal y solo sanea denormals/NaN por seguridad.
+
+## Ajuste fino de profundidad — mayo 2026
+
+Se reforzó el carácter Epicenter sin usar EQ ni bass boost genérico. Los cambios siguen dentro del core `EpicenterDSPCore`:
+
+| Constante / curva | Valor previo | Valor nuevo | Motivo |
+|---|---:|---:|---|
+| `DEEP_EXTENSION_AMOUNT` | `0.30` | `0.36` | Más energía subgrave reconstruida desde la capa profunda, por debajo del rango de bass boost típico. |
+| `SYNTH_DEPTH_GAIN` | `1.12` | `1.18` | Mayor presencia del sintetizador subgrave manteniendo soft clip. |
+| `DEEP_EXTENSION_MIX_BASE` | `0.42` | `0.46` | Más profundidad base al activar Epicenter. |
+| `DEEP_EXTENSION_MIX_VOICE` | `0.52` | `0.58` | Más aporte profundo cuando la protección de voz permite espacio. |
+| `GATE_DETECTOR_FLOOR` | `0.38` | `0.40` | Más autoridad con bajo centrado/mono real. |
+| `GATE_DETECTOR_AUTHORITY` | `0.18` | `0.22` | Sostiene mejor detector fuerte sin abrirse con ruido sin bajo. |
+| `OUTPUT_DC_HIGHPASS_HZ` | `28 Hz` | `27 Hz` | Un poco más de extensión manteniendo filtro subsónico seguro. |
+| Curva de intensidad | lineal | `pow(intensity, 0.85)` | El efecto aparece antes en medio recorrido sin concentrarse solo en 90–100%. |
+
+La extensión profunda mantiene HPF dedicado a 23 Hz, soft clip y trim de salida. Seek, stop y cambio de canción siguen reseteando el estado DSP desde el motor nativo.

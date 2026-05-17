@@ -1308,11 +1308,7 @@ export default function Home() {
           onToggleEq={toggleEq}
           onOpenAutoModal={() => setShowEqAutoModal(true)}
           onSetEqBandGain={audioProcessor.setEqBandGain}
-          onResetEq={() =>
-            audioProcessor.eqBands.forEach((_, index) =>
-              audioProcessor.setEqBandGain(index, 0),
-            )
-          }
+          onResetEq={audioProcessor.resetEq}
         />
       )}
 
@@ -1433,7 +1429,7 @@ export default function Home() {
 
       <HomeImportProgressOverlay t={t} importProgress={queue.importProgress} />
 
-      {activeTab !== "player" && (
+      {activeTab !== "player" && nowPlayingTrack && (
         <PremiumMiniPlayer
           track={nowPlayingTrack}
           isPlaying={audioProcessor.isPlaying}
@@ -1461,7 +1457,7 @@ export default function Home() {
         }
         t={t}
       />
-      <div className={activeTab === "player" ? "h-0" : "h-32"} />
+      <div className={activeTab === "player" ? "h-0" : "home-bottom-spacer"} />
     </div>
   );
 }

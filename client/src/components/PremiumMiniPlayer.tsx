@@ -26,7 +26,7 @@ export function PremiumMiniPlayer({
   const progress = duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0;
 
   return (
-    <div className="fixed left-3 right-3 bottom-[5.9rem] z-40 rounded-2xl border border-[var(--ep-border)] bg-[#080808]/95 shadow-[0_-10px_32px_rgba(0,0,0,0.5)]">
+    <div className="mini-player-fixed rounded-2xl border border-[var(--ep-border)] bg-[#080808]/95 shadow-[0_-10px_32px_rgba(0,0,0,0.5)]">
       <div className="h-0.5 rounded-t-2xl bg-[#1b1b1b]">
         <div className="h-full rounded-tl-2xl bg-[var(--ep-red)] shadow-[0_0_12px_rgba(255,16,42,0.5)]" style={{ width: `${progress}%` }} />
       </div>

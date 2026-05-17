@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core';
-import { isHiResQuality } from '@shared/audioQuality';
+import { classifyAudioQuality, isHiResQuality, type AudioQualityClass } from '@shared/audioQuality';
 import type { IOSNativeTrack } from '@/native/iosNativeAudio';
 
 export interface IOSAppTrack {
@@ -19,6 +19,7 @@ export interface IOSAppTrack {
   sampleRate?: number;
   bitrate?: number;
   isHiRes?: boolean;
+  qualityClass?: AudioQualityClass;
   sourceUri?: string;
   sourceType?: 'manual-ios';
   albumArtUri?: string;
@@ -69,11 +70,13 @@ export const nativeTrackToAppTrack = (track: IOSNativeTrack): IOSAppTrack => {
   const bitDepth = numberOrUndefined(track.bitDepth);
   const bitrate = numberOrUndefined(track.bitrate);
   const albumArtUri = cleanText(track.albumArtUri);
+  const fileExtension = cleanText(track.fileExtension)?.toLowerCase();
+  const isHiRes = isHiResQuality(bitDepth, sampleRate, fileExtension);
 
   return {
     id: track.id,
     fileName,
-    fileType: track.fileExtension ? `audio/${track.fileExtension}` : undefined,
+    fileType: fileExtension ? `audio/${fileExtension}` : undefined,
     fileSize: numberOrUndefined(track.sizeBytes),
     title,
     artist,
@@ -83,7 +86,8 @@ export const nativeTrackToAppTrack = (track: IOSNativeTrack): IOSAppTrack => {
     bitDepth,
     sampleRate,
     bitrate,
-    isHiRes: isHiResQuality(bitDepth, sampleRate),
+    isHiRes,
+    qualityClass: classifyAudioQuality(bitDepth, sampleRate, bitrate, fileExtension),
     sourceUri: cleanText(track.sourceUri),
     sourceType: 'manual-ios',
     albumArtUri: albumArtUri ?? undefined,

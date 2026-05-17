@@ -96,7 +96,7 @@ export function HomeLibraryView({
   hiresLogoUrl,
 }: HomeLibraryViewProps) {
   return (
-    <div className="flex-1 flex flex-col pb-32" data-testid="library-view">
+    <div className="flex-1 flex flex-col home-scroll-with-player" data-testid="library-view">
       <header className="flex items-center justify-between px-5 pt-12 pb-3">
         {libraryView === "main" ? (
           <div><p className="premium-title text-[10px] font-black text-[var(--ep-red)]">Mobile Library</p><h2 className="premium-title text-2xl font-black text-white">{t("library.title")}</h2></div>

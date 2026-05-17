@@ -2,13 +2,14 @@
  * EpicenterDSP 7.0 - hardware-style audio quality badges.
  */
 
-import { formatQualityLabel, isHiResQuality } from "@shared/audioQuality";
+import { classifyAudioQuality, formatQualityLabel, isHiResQuality, qualityClassLabel } from "@shared/audioQuality";
 
 interface AudioQualityBadgeProps {
   bitDepth?: number;
   sampleRate?: number;
   bitrate?: number;
   isHiRes?: boolean;
+  fileExtension?: string;
   compact?: boolean;
   hiResLogoUrl?: string;
 }
@@ -18,11 +19,13 @@ export function AudioQualityBadge({
   sampleRate,
   bitrate,
   isHiRes,
+  fileExtension,
   compact = false,
   hiResLogoUrl,
 }: AudioQualityBadgeProps) {
-  const detectedHiRes = isHiResQuality(bitDepth, sampleRate);
+  const detectedHiRes = isHiResQuality(bitDepth, sampleRate, fileExtension);
   const isHighRes = typeof isHiRes === "boolean" ? isHiRes : detectedHiRes;
+  const qualityClass = isHighRes ? 'hi-res' : classifyAudioQuality(bitDepth, sampleRate, bitrate, fileExtension);
   const parts = [formatQualityLabel(bitDepth, sampleRate)].filter(Boolean);
 
   if (typeof bitrate === "number" && bitrate > 0) {
@@ -41,7 +44,7 @@ export function AudioQualityBadge({
         }`}
         data-testid="quality-badge-compact"
       >
-        {parts.join(" • ").replace("-bit ", "b/").replace("kHz", "k")}
+        {`${qualityClassLabel(qualityClass)}${parts.length ? ` • ${parts.join(" • ").replace("-bit ", "b/").replace("kHz", "k")}` : ""}`}
       </span>
     );
   }
@@ -60,7 +63,7 @@ export function AudioQualityBadge({
         </span>
       ) : (
         <span className="quality-chip rounded-md px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em]">
-          {isHighRes ? "HI-RES" : "STANDARD"}
+          {qualityClassLabel(qualityClass)}
         </span>
       )}
       {chips.map((chip) => (

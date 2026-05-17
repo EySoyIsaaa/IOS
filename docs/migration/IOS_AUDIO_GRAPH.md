@@ -1,62 +1,60 @@
 # iOS Audio Graph
 
-## Grafo actual de esta fase
+## Grafo actual
 
 ```text
-Decoded local file (Float32, non-interleaved, prepared outside render)
-→ AVAudioSourceNode render block
-→ EpicenterDSPBridge.processLeft/right
-→ EpicenterDSPCore C++ sample-by-sample
-→ AVAudioEngine mainMixerNode
+Archivo local importado / AVAudioFile
+→ AVAudioPCMBuffer decodificado
+→ AVAudioSourceNode
+→ etapa Epicenter nativa existente en la ruta iOS
+→ AVAudioUnitEQ de 31 bandas
+→ AVAudioUnitReverb (Reverb)
+→ AVAudioUnitReverb (Concert Hall)
+→ AVAudioEngine.mainMixerNode
 → hardware output / background audio session
 ```
 
-## Por qué no se dejó `AVAudioPlayerNode → effect → mainMixer`
+Esta rama sigue siendo iOS-only. No usa WebAudio, AudioWorklet ni `HTMLAudioElement`.
 
-`AVAudioPlayerNode` programa buffers/archivos hacia el motor, pero AVFoundation no ofrece un callback de efecto in-place simple entre un `AVAudioPlayerNode` y el mixer sin crear un Audio Unit custom completo. Para esta fase se priorizó:
+## Integración EQ/FX
 
-- fidelidad del algoritmo Epicenter Worklet,
-- procesamiento sample-by-sample en C++,
-- cero allocations dentro del callback DSP,
-- cambios de parámetros en reproducción,
-- no reintroducir WebAudio/AudioWorklet ni HTMLAudioElement.
+`NativeAudioEngine` adjunta las unidades una sola vez al inicializar el motor:
 
-Por eso se usa `AVAudioSourceNode`: el archivo se decodifica a `AVAudioPCMBuffer` fuera del callback y el render block solo copia frames al buffer de salida, llama al bridge y avanza el cursor.
+1. `AVAudioSourceNode` para emitir el buffer local decodificado y conservar el procesamiento Epicenter por muestra.
+2. `AVAudioUnitEQ(numberOfBands: 31)` para el EQ gráfico.
+3. `AVAudioUnitReverb` con preset `.mediumRoom` para Reverb.
+4. `AVAudioUnitReverb` con preset `.largeHall` para Concert Hall.
+5. `mainMixerNode` como salida final.
 
-## Reglas de tiempo real
+Los cambios de EQ/FX no reconstruyen el grafo; solo actualizan bypass, gain, `globalGain`, `wetDryMix` y trim de salida.
 
-- No hay SQLite en el render block.
-- No hay logs por muestra/buffer en el render block.
-- El core C++ preasigna `subBuffer` y `deepExtensionBuffer` en `prepare()`.
-- Los parámetros del core se leen desde atómicos al inicio del bloque.
-- El callback solo accede al buffer PCM ya cargado y al bridge DSP.
+## Bandas EQ
 
-## Reset de estado DSP
+El EQ usa 31 bandas ISO-style: 20 Hz a 20 kHz. Las bandas se configuran como filtros paramétricos de 1/3 de octava y respetan el rango de UI `-8 dB` a `+8 dB`.
 
-`NativeAudioEngine.load(track:)` prepara el core con sample rate/channel count del archivo y llama `reset()`. Seek mantiene parámetros y reposiciona el cursor; carga de track/next/previous resetea filtros y envelopes para evitar colas del track anterior.
+## FX
 
-## Pendiente para fases futuras
-
-No se agregó EQ nativo, Reverb ni Concert Hall en esta fase. Si se implementan después, deben insertarse después del Epicenter o en un pipeline explícito documentado sin modificar el carácter de este port.
-
-## Calibración de profundidad y logging
-
-La calibración de profundidad vive dentro de `EpicenterDSPCore` y no cambia el grafo de audio. El render block sigue siendo:
+Reverb y Concert Hall pueden activarse juntos. El comportamiento elegido es serial controlado:
 
 ```text
-AVAudioSourceNode render block
-→ copia de frames PCM ya decodificados
-→ EpicenterDSPBridge.processLeft/right
-→ EpicenterDSPCore.process()
-→ mainMixerNode
+EQ → Reverb → Concert Hall → mainMixer
 ```
 
-Se agregó un log fuera del callback de audio al preparar el nodo:
+Para evitar mezclas agresivas, los amounts `0–100` se mapean a wet/dry máximos limitados (`55%` y `45%`).
 
-```text
-[iOS Epicenter DSP] depth calibration constants ...
-```
+## Headroom
 
-Ese log se emite en `configureSourceNode(format:)`, no dentro del loop de render ni por buffer. Los cambios de profundidad mantienen las mismas restricciones de tiempo real: no SQLite, no I/O, no allocations DSP en `process()` y sin logs dentro del callback.
+El motor calcula headroom cuando hay boosts positivos y/o FX activos:
 
-La protección anti-rumble se mantiene con dos etapas: HPF subsónico dedicado en la deep extension a 23 Hz y DC/high-pass final por canal a 28 Hz. Seek, stop y cambio de canción siguen reseteando el estado DSP para evitar que envelopes o filtros de un fragmento anterior dejen rumble residual.
+- `eqNode.globalGain` compensa boosts del EQ.
+- `mainMixerNode.outputVolume` aplica trim final compartido.
+- El cálculo de EQ está recalibrado para ±8 dB y evita bajar demasiado el volumen con boosts moderados; el trim global del motor conserva el límite de seguridad.
+
+## Funciones preservadas
+
+- Importación manual nativa.
+- Biblioteca local iOS.
+- Queue/play/pause/seek/stop/next/previous.
+- Background playback.
+- Now Playing / lock screen / Control Center.
+- UI actual de Player, Biblioteca, DSP, EQ, FX y Settings.

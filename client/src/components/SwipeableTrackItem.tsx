@@ -262,6 +262,7 @@ export function SwipeableTrackItem({
                   sampleRate={track.sampleRate}
                   bitrate={track.bitrate}
                   isHiRes={track.isHiRes}
+                  fileExtension={track.fileName?.split(".").pop()}
                   compact 
                 />
               </div>
