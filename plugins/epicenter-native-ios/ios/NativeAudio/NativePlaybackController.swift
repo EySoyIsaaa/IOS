@@ -129,6 +129,28 @@ final class NativePlaybackController {
         }
     }
 
+    func setEpicenterEnabled(_ enabled: Bool) -> [String: Any] {
+        queue.sync {
+            let response = engine.setEpicenterEnabled(enabled)
+            emit("playbackStateChanged", engine.playbackState(queue: queueManager.dictionary))
+            return response
+        }
+    }
+
+    func setEpicenterParams(intensity: Double?, sweepFreq: Double?, width: Double?, balance: Double?, volume: Double?) -> [String: Any] {
+        queue.sync {
+            let response = engine.setEpicenterParams(
+                intensity: intensity,
+                sweepFreq: sweepFreq,
+                width: width,
+                balance: balance,
+                volume: volume
+            )
+            emit("playbackStateChanged", engine.playbackState(queue: queueManager.dictionary))
+            return response
+        }
+    }
+
     func notImplementedResponse(_ method: String) -> [String: Any] {
         ["status": NativeAudioStubStatus.notImplemented.rawValue, "method": method]
     }

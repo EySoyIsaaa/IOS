@@ -57,6 +57,9 @@ export function useIosNativeAudioProcessor() {
     setCurrentTime(state.currentTime || 0);
     setDuration(state.duration || (state.durationMs ? state.durationMs / 1000 : 0));
     setCurrentTrackId(state.currentTrackId ?? state.currentTrack?.id ?? null);
+    if (state.epicenter) {
+      setEpicenterEnabledState(!!state.epicenter.enabled);
+    }
   }, []);
 
   const reportError = useCallback((error: unknown) => {
@@ -150,6 +153,11 @@ export function useIosNativeAudioProcessor() {
     void EpicenterNative.setEpicenterEnabled({ enabled }).catch(reportError);
   }, [reportError]);
 
+  const setDspParam = useCallback((key?: keyof StreamingParams, value?: number) => {
+    if (!key || typeof value !== 'number') return;
+    void EpicenterNative.setEpicenterParams({ [key]: value }).catch(reportError);
+  }, [reportError]);
+
   const setEqEnabled = useCallback((enabled: boolean) => {
     setEqEnabledState(enabled);
     if (enabled) void EpicenterNative.setEqBands({ gains: eqBands.map((band) => band.gain) }).catch(reportError);
@@ -182,7 +190,7 @@ export function useIosNativeAudioProcessor() {
     setOnTrackError: (handler: ((error: unknown) => void) | null) => { onTrackErrorRef.current = handler; },
     getAnalyserNode: () => null as AnalyserNode | null,
     setCrossfadeConfig: (_config?: unknown) => {},
-    setDspParam: (_key?: keyof StreamingParams, _value?: number) => {},
+    setDspParam,
     setEpicenterEnabled,
     setEqEnabled,
     setEqBandGain,
@@ -207,6 +215,7 @@ export function useIosNativeAudioProcessor() {
     stop,
     getPlaybackState,
     setEpicenterEnabled,
+    setDspParam,
     setEqEnabled,
     setEqBandGain,
     setReverbEnabled,
