@@ -1,5 +1,5 @@
-export const HI_RES_MIN_BIT_DEPTH = 16;
-export const HI_RES_MIN_SAMPLE_RATE = 44100;
+export const HI_RES_MIN_BIT_DEPTH = 24;
+export const HI_RES_MIN_SAMPLE_RATE = 48000;
 
 export function isHiResQuality(bitDepth?: number, sampleRate?: number): boolean {
   if (typeof bitDepth !== "number" || typeof sampleRate !== "number") {

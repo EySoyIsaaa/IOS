@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EpicenterNative, type IOSNativePlaybackState } from '@/native/iosNativeAudio';
+import { nativeTrackToAppTrack, type IOSAppTrack } from '@/native/iosTrackMapper';
 
 export interface StreamingParams {
   sweepFreq: number;
@@ -39,6 +40,7 @@ export function useIosNativeAudioProcessor() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTrackId, setCurrentTrackId] = useState<string | null>(null);
+  const [currentTrack, setCurrentTrack] = useState<IOSAppTrack | null>(null);
   const [epicenterEnabled, setEpicenterEnabledState] = useState(false);
   const [eqEnabled, setEqEnabledState] = useState(false);
   const [eqBands, setEqBands] = useState<EqBand[]>(DEFAULT_EQ_BANDS);
@@ -57,6 +59,7 @@ export function useIosNativeAudioProcessor() {
     setCurrentTime(state.currentTime || 0);
     setDuration(state.duration || (state.durationMs ? state.durationMs / 1000 : 0));
     setCurrentTrackId(state.currentTrackId ?? state.currentTrack?.id ?? null);
+    setCurrentTrack(state.currentTrack ? nativeTrackToAppTrack(state.currentTrack) : null);
     if (state.epicenter) {
       setEpicenterEnabledState(!!state.epicenter.enabled);
     }
@@ -173,6 +176,7 @@ export function useIosNativeAudioProcessor() {
     duration,
     isPlaying,
     currentTrackId,
+    currentTrack,
     epicenterEnabled,
     eqEnabled,
     eqBands,
@@ -204,6 +208,7 @@ export function useIosNativeAudioProcessor() {
     duration,
     isPlaying,
     currentTrackId,
+    currentTrack,
     epicenterEnabled,
     eqEnabled,
     eqBands,

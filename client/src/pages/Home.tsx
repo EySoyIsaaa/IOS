@@ -396,6 +396,23 @@ export default function Home() {
     currentTrackIdRef.current = queue.currentTrack?.id ?? null;
   }, [queue.currentTrack?.id]);
 
+  useEffect(() => {
+    const nativeTrack = audioProcessor.currentTrack;
+    if (!nativeTrack) {
+      if (!audioProcessor.currentTrackId) {
+        setNowPlayingTrack(null);
+      }
+      return;
+    }
+
+    const queuedTrack =
+      queue.queue.find((track) => track.id === nativeTrack.id) ??
+      queue.library.find((track) => track.id === nativeTrack.id);
+
+    currentTrackRef.current = nativeTrack.id;
+    setNowPlayingTrack({ ...(queuedTrack ?? {}), ...nativeTrack } as Track);
+  }, [audioProcessor.currentTrack, audioProcessor.currentTrackId, queue.library, queue.queue]);
+
   const clearPendingPlaybackTimers = useCallback(() => {
     if (playTimeoutRef.current !== null) {
       window.clearTimeout(playTimeoutRef.current);
