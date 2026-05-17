@@ -264,6 +264,7 @@ export function SwipeableTrackItem({
                   codec={track.codec}
                   fileExtension={track.fileName?.split('.').pop()}
                   isHiRes={track.isHiRes}
+                  fileExtension={track.fileName?.split(".").pop()}
                   compact 
                 />
               </div>

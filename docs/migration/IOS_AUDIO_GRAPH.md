@@ -4,6 +4,7 @@
 
 ```text
 Archivo local importado / AVAudioFile
+→ AVAudioPCMBuffer decodificado
 → AVAudioSourceNode
 → etapa Epicenter nativa existente en la ruta iOS
 → AVAudioUnitEQ de 31 bandas
@@ -19,7 +20,7 @@ Esta rama sigue siendo iOS-only. No usa WebAudio, AudioWorklet ni `HTMLAudioElem
 
 `NativeAudioEngine` adjunta las unidades una sola vez al inicializar el motor:
 
-1. `AVAudioSourceNode` para renderizar el buffer local decodificado y procesado por Epicenter.
+1. `AVAudioSourceNode` para emitir el buffer local decodificado y conservar el procesamiento Epicenter por muestra.
 2. `AVAudioUnitEQ(numberOfBands: 31)` para el EQ gráfico.
 3. `AVAudioUnitReverb` con preset `.mediumRoom` para Reverb.
 4. `AVAudioUnitReverb` con preset `.largeHall` para Concert Hall.
@@ -47,7 +48,7 @@ El motor calcula headroom cuando hay boosts positivos y/o FX activos:
 
 - `eqNode.globalGain` compensa boosts del EQ.
 - `mainMixerNode.outputVolume` aplica trim final compartido.
-- El trim total se limita a `10 dB`.
+- El cálculo de EQ está recalibrado para ±8 dB y evita bajar demasiado el volumen con boosts moderados; el trim global del motor conserva el límite de seguridad.
 
 ## Funciones preservadas
 
