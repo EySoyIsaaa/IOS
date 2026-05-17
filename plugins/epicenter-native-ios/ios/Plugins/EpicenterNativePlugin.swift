@@ -20,8 +20,15 @@ public class EpicenterNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "previous", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setEpicenterEnabled", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setEpicenterParams", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setEqEnabled", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setEqBand", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setEqBands", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setEqPreset", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "resetEq", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setReverbEnabled", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setReverbAmount", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setConcertHallEnabled", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setConcertHallAmount", returnType: CAPPluginReturnPromise),
     ]
 
     private let repository = NativeTrackRepository()
@@ -31,8 +38,6 @@ public class EpicenterNativePlugin: CAPPlugin, CAPBridgedPlugin {
     }
     private lazy var importer = NativeTrackImporter(repository: repository)
     private lazy var playbackController = NativePlaybackController(repository: repository)
-    private let eqProcessor = EQ31BandProcessor()
-    private let reverbProcessor = ReverbProcessor()
 
     public override func load() {
         playbackController.setEventEmitter { [weak self] eventName, data in
@@ -139,13 +144,49 @@ public class EpicenterNativePlugin: CAPPlugin, CAPBridgedPlugin {
         ))
     }
 
+    @objc func setEqEnabled(_ call: CAPPluginCall) {
+        let enabled = call.getBool("enabled") ?? false
+        call.resolve(playbackController.setEqEnabled(enabled))
+    }
+
+    @objc func setEqBand(_ call: CAPPluginCall) {
+        let index = call.getInt("index") ?? -1
+        let gain = call.getDouble("gain") ?? 0
+        call.resolve(playbackController.setEqBand(index: index, gain: gain))
+    }
+
     @objc func setEqBands(_ call: CAPPluginCall) {
         let gains = call.getArray("gains", Double.self) ?? []
-        call.resolve(eqProcessor.setBands(gains))
+        call.resolve(playbackController.setEqBands(gains))
+    }
+
+    @objc func setEqPreset(_ call: CAPPluginCall) {
+        let name = call.getString("name")
+        let gains = call.getArray("gains", Double.self) ?? []
+        call.resolve(playbackController.setEqPreset(name: name, gains: gains))
+    }
+
+    @objc func resetEq(_ call: CAPPluginCall) {
+        call.resolve(playbackController.resetEq())
     }
 
     @objc func setReverbEnabled(_ call: CAPPluginCall) {
         let enabled = call.getBool("enabled") ?? false
-        call.resolve(reverbProcessor.setEnabled(enabled))
+        call.resolve(playbackController.setReverbEnabled(enabled))
+    }
+
+    @objc func setReverbAmount(_ call: CAPPluginCall) {
+        let amount = call.getDouble("amount") ?? 0
+        call.resolve(playbackController.setReverbAmount(amount))
+    }
+
+    @objc func setConcertHallEnabled(_ call: CAPPluginCall) {
+        let enabled = call.getBool("enabled") ?? false
+        call.resolve(playbackController.setConcertHallEnabled(enabled))
+    }
+
+    @objc func setConcertHallAmount(_ call: CAPPluginCall) {
+        let amount = call.getDouble("amount") ?? 0
+        call.resolve(playbackController.setConcertHallAmount(amount))
     }
 }

@@ -17,6 +17,7 @@ export interface Track extends IOSAppTrack {
   isEphemeral?: boolean;
   fileName?: string;
   fileType?: string;
+  codec?: string;
   fileSize?: number;
   title: string;
   artist: string;

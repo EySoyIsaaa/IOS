@@ -23,7 +23,7 @@ export function HomeEqView({ t, eqEnabled, eqBands, onToggleEq, onOpenAutoModal,
   }, []);
 
   return (
-    <div ref={viewRef} className="flex-1 overflow-y-auto px-4 pb-32 pt-12" data-testid="eq-view">
+    <div ref={viewRef} className="flex-1 overflow-y-auto px-4 home-scroll-with-player pt-12" data-testid="eq-view">
       <header className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="premium-title text-[10px] font-black text-[var(--ep-red)]">DSP Equalizer</p>

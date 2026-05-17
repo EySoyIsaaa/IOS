@@ -2,10 +2,19 @@
 
 ## Estado de esta fase
 
-La reproducción nativa sigue centralizada en `NativePlaybackController` y `NativeAudioEngine`. La fase Epicenter cambió la fuente interna del motor para poder procesar DSP nativo:
+La reproducción nativa sigue centralizada en `NativePlaybackController` y `NativeAudioEngine`. La fase actual conserva importación, biblioteca, reproducción, background playback y controles remotos, y añade EQ/FX dentro del grafo AVAudioEngine.
 
-- antes: `AVAudioPlayerNode` programando `AVAudioFile` directo al mixer;
-- ahora: `AVAudioSourceNode` leyendo un `AVAudioPCMBuffer` decodificado fuera del render y procesado por `EpicenterDSPCore` antes del `mainMixerNode`.
+## Grafo
+
+```text
+AVAudioFile local
+→ AVAudioSourceNode
+→ etapa Epicenter nativa existente
+→ AVAudioUnitEQ 31 bandas
+→ AVAudioUnitReverb Reverb
+→ AVAudioUnitReverb Concert Hall
+→ mainMixerNode
+```
 
 ## Funciones preservadas
 
@@ -13,6 +22,11 @@ La reproducción nativa sigue centralizada en `NativePlaybackController` y `Nati
 - Biblioteca local/SQLite permanece fuera del hilo de audio.
 - Queue, play/pause/seek/stop/next/previous permanecen en `NativePlaybackController`.
 - Background playback y controles remotos permanecen en `NativeAudioSessionManager`, `NowPlayingManager` y `RemoteCommandManager`.
+- El mini-player y la bottom navigation son frontend; no afectan sesión ni Now Playing.
+
+## EQ y FX durante reproducción
+
+Los métodos del plugin llaman a `NativePlaybackController`, que serializa operaciones en su queue interna y actualiza unidades ya adjuntas al motor. No se detiene ni se recrea el grafo al mover sliders o knobs.
 
 ## Cómo probar en iPhone
 
@@ -22,10 +36,11 @@ La reproducción nativa sigue centralizada en `NativePlaybackController` y `Nati
 4. Compilar en iPhone físico.
 5. Importar canciones con el picker nativo.
 6. Reproducir una canción.
-7. Activar Epicenter y mover `INTENSIDAD`, `SWEEP`, `WIDTH`, `BALANCE` y `VOLUME`.
-8. Validar bypass limpio al desactivar Epicenter.
-9. Bloquear pantalla y comprobar controles remotos/background playback.
+7. Validar play/pause/seek/next/previous.
+8. Bloquear pantalla y comprobar controles remotos/background playback.
+9. Activar Epicenter, EQ, Reverb y Concert Hall; mover parámetros en tiempo real.
+10. Hacer seek y cambio de canción con EQ/FX activos.
 
 ## Limitaciones conocidas
 
-El archivo completo se decodifica a memoria en `load(track:)` para mantener el render callback sin I/O de disco. Es aceptable para esta fase de fidelidad DSP; una fase posterior podría reemplazarlo por un lector circular prebufferizado siempre que no bloquee el hilo de audio.
+La fidelidad de Reverb/Concert Hall depende de presets AVFoundation. Para un carácter exacto de hardware externo se requeriría portar DSP propio en una fase posterior.
