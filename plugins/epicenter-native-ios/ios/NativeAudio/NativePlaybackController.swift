@@ -10,6 +10,7 @@ final class NativePlaybackController {
     private let queue = DispatchQueue(label: "com.epicenter.hifi.native-playback-controller")
     private var progressTimer: Timer?
     private var wasPlayingBeforeInterruption = false
+    private var temporarilyFailedTrackIds = Set<String>()
 
     var eventEmitter: ((String, [String: Any]) -> Void)?
 
@@ -37,6 +38,7 @@ final class NativePlaybackController {
     func setQueue(trackIds: [String], startIndex: Int) -> [String: Any] {
         queue.sync {
             queueManager.setQueue(trackIds: trackIds, startIndex: startIndex)
+            temporarilyFailedTrackIds.removeAll()
             let response: [String: Any] = [
                 "status": "ok",
                 "queue": queueManager.dictionary,
@@ -243,6 +245,7 @@ final class NativePlaybackController {
                 emit("currentTrackChanged", ["status": "ok", "track": track.dictionary])
             }
             try engine.play()
+            temporarilyFailedTrackIds.remove(track.id)
             let state = engine.playbackState(queue: queueManager.dictionary)
             updateNowPlayingPlayback(from: state, playbackRate: 1, force: true)
             emit("playbackStateChanged", state)
@@ -250,11 +253,26 @@ final class NativePlaybackController {
             return state
         } catch let error as NativeAudioEngine.EngineError {
             stopProgressTimer()
-            return playbackErrorResponse(code: error.errorCode, message: error.localizedDescription, trackId: requestedTrackId)
+            return controlledPlaybackFailure(code: error.errorCode, message: error.localizedDescription, trackId: requestedTrackId)
         } catch {
             stopProgressTimer()
-            return playbackErrorResponse(code: "play_failed", message: error.localizedDescription, trackId: requestedTrackId)
+            return controlledPlaybackFailure(code: "play_failed", message: error.localizedDescription, trackId: requestedTrackId)
         }
+    }
+
+    private func controlledPlaybackFailure(code: String, message: String, trackId: String) -> [String: Any] {
+        temporarilyFailedTrackIds.insert(trackId)
+        let response = playbackErrorResponse(code: code, message: message, trackId: trackId)
+        print("[NativePlaybackController] track failed temporarily trackId=\(trackId) code=\(code)")
+        while let nextTrackId = queueManager.moveNext() {
+            if temporarilyFailedTrackIds.contains(nextTrackId) {
+                continue
+            }
+            print("[NativePlaybackController] skipping failed trackId=\(trackId) nextTrackId=\(nextTrackId)")
+            return playCurrentTrack(requestedTrackId: nextTrackId, shouldRestartLoadedTrack: true)
+        }
+        temporarilyFailedTrackIds.removeAll()
+        return response
     }
 
     private func handleTrackFinished(_ track: NativeTrack) {

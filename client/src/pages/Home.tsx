@@ -270,6 +270,19 @@ export default function Home() {
   const mediaStoreReconciledRef = useRef(false);
   const lastPositionSyncRef = useRef(0);
 
+  const safeLibrary = useMemo(() => {
+    if (!Array.isArray(queue.library)) return [];
+    return queue.library
+      .map((track) => normalizeLibraryTrack(track))
+      .filter((track): track is Track => {
+        if (!track?.id) {
+          console.warn("[SongsScreen] invalid track skipped", { track });
+          return false;
+        }
+        return true;
+      });
+  }, [queue.library]);
+
   const hiResTracks = useMemo(
     () => safeLibrary.filter((track) => track.isHiRes),
     [safeLibrary],
@@ -641,7 +654,7 @@ export default function Home() {
           queue.queue.length > 1 &&
           queue.currentTrackIndex < queue.queue.length - 1
         ) {
-          handleNextTrack("unsupported-skip");
+          void audioProcessor.next();
         }
         return;
       }
@@ -677,7 +690,6 @@ export default function Home() {
     [
       audioProcessor,
       clearPendingPlaybackTimers,
-      handleNextTrack,
       queue.currentTrackIndex,
       queue.queue.length,
       t,
@@ -733,15 +745,9 @@ export default function Home() {
       currentTrackRef.current = null;
       console.error("Playback runtime error:", error);
 
-      const movedToNextTrack =
-        playNextAvailableTrackAfterFailure(failedTrackId);
-      if (movedToNextTrack) {
-        toast.error(t("actions.errorLoadingTrackSkipped"));
-      } else {
-        // Evitar "bloqueo" permanente por lista de fallos acumulada.
-        failedQueueTrackIdsRef.current.clear();
-        toast.error(t("actions.errorLoadingTrackNoFallback"));
-      }
+      // NativePlaybackController owns failure-skip decisions. Web only records
+      // the temporary failed track and reflects the controlled error to the UI.
+      toast.error(t("actions.errorLoadingTrackSkipped"));
     });
 
     return () => {
