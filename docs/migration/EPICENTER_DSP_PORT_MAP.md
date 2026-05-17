@@ -1,0 +1,60 @@
+# Epicenter DSP Port Map: AudioWorklet → iOS nativo
+
+Fuente de referencia: `client/src/worklets/epicenter-worklet.ts` del baseline histórico `1c7b3af4fc0296c89f30212041e79cd30b772a8b`. En esta rama iOS-only el archivo ya no existe en el árbol actual, pero el port usa ese commit como fuente exacta del algoritmo.
+
+Implementación nativa:
+
+- Core C++ real-time: `plugins/epicenter-native-ios/ios/DSP/EpicenterDSPCore.hpp` y `plugins/epicenter-native-ios/ios/DSP/EpicenterDSPCore.cpp`.
+- Bridge Objective-C++ para Swift: `plugins/epicenter-native-ios/ios/DSP/EpicenterDSPBridge.h` y `plugins/epicenter-native-ios/ios/DSP/EpicenterDSPBridge.mm`.
+- Integración AVAudioEngine: `plugins/epicenter-native-ios/ios/NativeAudio/NativeAudioEngine.swift`.
+
+## Tabla de mapeo 1:1
+
+| TS/Worklet original | Propósito | Equivalente nativo iOS | Notas de fidelidad |
+|---|---|---|---|
+| `DENORMAL_FLOOR = 1e-24` | Elimina denormals y valores microscópicos. | `DENORMAL_FLOOR` + `denormalFloor()` en C++. | Igual valor; además protege NaN/Inf en nativo. |
+| `TWO_PI` | Cálculo de coeficientes biquad. | `TWO_PI` en C++. | Igual fórmula. |
+| `EPICENTER_INTENSITY_HEADROOM = 0.75` | Headroom de intensidad. | Constante C++ igual. | 1:1. |
+| `EPICENTER_INTENSITY_MAX_SCALE = 0.65` | Escala máxima efectiva de intensidad. | Constante C++ igual. | 1:1. |
+| `EPICENTER_VOLUME_MAX_SCALE = 0.75` | Escala máxima de volumen/output. | Constante C++ igual. | 1:1. |
+| `EPICENTER_OUTPUT_TRIM = 0.95` | Trim final antes de clip/DC. | Constante C++ igual. | 1:1. |
+| `DEEP_EXTENSION_AMOUNT = 0.18` | Capa adicional de extensión profunda. | Constante C++ igual. | 1:1. |
+| `softClip(value)` | Saturación suave de protección. | `softClip(float)` en C++. | Misma ecuación `(x*(27+x²))/(27+9x²)`. |
+| `SOFT_CLIP_09` | Normalización del soft clip final. | `SOFT_CLIP_09` en C++. | Igual cálculo. |
+| `BiquadFilter` lowpass/highpass/bandpass | Filtros RBJ con estados `x1/x2/y1/y2`. | `epicenter::BiquadFilter`. | Mismos tipos, clamp de frecuencia 10 Hz–0.45×SR y Q 0.2–12. |
+| `LowShelfFilter` | Shelf de grave posterior a mezcla. | `epicenter::LowShelfFilter`. | Mismo cookbook de low shelf, Q 0.707, gain 0–10.5 dB. |
+| `EnvelopeFollower` | Seguidores attack/release. | `epicenter::EnvelopeFollower`. | Misma ecuación `x + coeff*(value-x)` y coeficientes ms→samples. |
+| `parameterDescriptors.sweepFreq` | Sweep 27–63 Hz. | `setEpicenterParams({ sweepFreq })`. | Mismo rango y default 45 Hz. |
+| `parameterDescriptors.width` | Width 0–100. | `setEpicenterParams({ width })`. | Mismo rango/default 50. |
+| `parameterDescriptors.intensity` | Intensidad 0–100. | `setEpicenterParams({ intensity })`. | Mismo rango/default 100. |
+| `parameterDescriptors.balance` | Balance/ruta bass program 0–100. | `setEpicenterParams({ balance })`. | Mismo rango/default 100. |
+| `parameterDescriptors.volume` | Salida 0–100. | `setEpicenterParams({ volume })`; alias `output`. | Mismo rango/default 100. |
+| `getDerivedFrequencies()` | Deriva detector, crossover, sub y extensión desde sweep/width. | `EpicenterDSPCore::getDerivedFrequencies()`. | Fórmulas copiadas: detector60/80/110, crossover, body, subTop, synth low/high y deepExtension. |
+| `StereoChannelState` | Estado persistente por canal. | `ChannelState`. | Conserva filtros de voz, presencia, bass program, body/dip, sub LPF, shelf, DC HPF y voice envelope. |
+| `MonoDetectorState` | Estado mono compartido. | `MonoState`. | Conserva bandas 60/80/110, mono LPF, diff HPF, synth HP/LP, deep extension, envelopes, `lastDetector`, `flipState`, `holdSamples`. |
+| `computeGate()` | Gate musical contra voz/ausencia de bajo. | `EpicenterDSPCore::computeGate()`. | Misma actividad detector × music score. |
+| Bypass `intensity <= 0.01` | Salida limpia. | Bypass cuando `enabled=false` o `intensity<=0.01`. | Añade switch explícito nativo; bypass solo sanea denormals/NaN. |
+| Mono detector loop | Detecta bajo dominante L+R y diferencia estéreo. | Primer loop de `processChunk()`. | Mismo orden: mono/diff → bandas ponderadas → envelopes → flip → synth → gate/hold → subBuffer. |
+| Deep extension loop | Genera capa subgrave baja protegida. | Segundo loop de `processChunk()`. | Mismo LPF, HPF subsonic 24 Hz, envelope sustain y soft clip. |
+| Channel render loop | Recombinación por canal. | Tercer loop de `processChunk()`. | Mismo orden voz limpia → bass program/body/dip → generated sub → shelf → output trim → soft clip → DC blocker. |
+| `subBuffer`/`deepExtensionBuffer` | Buffers internos reutilizables. | Vectores preasignados en `prepare()`. | Sin allocations en `process()`; bloques grandes se procesan en chunks. |
+| `outputDcHighpass` 32 Hz | Bloqueo DC y subsonic final. | Biquad HPF 32 Hz por canal. | 1:1. |
+| `deepExtensionSubsonicHighpass` 24 Hz | Protección subsónica de extensión. | Biquad HPF 24 Hz mono. | 1:1. |
+
+## Orden exacto de procesamiento portado
+
+1. Leer parámetros atómicos una vez por bloque.
+2. Si `enabled=false` o `intensity<=0.01`, bypass seguro.
+3. Actualizar coeficientes derivados si cambió `sweepFreq` o `width`.
+4. Calcular normalizaciones del Worklet: `intensityRawNorm`, `intensityScaledNorm`, `intensityNorm`, `balanceNorm`, `widthNorm`, `volumeGain`.
+5. Loop mono detector: mono/diff, bandas ponderadas, detector envelope, gate, flip de media frecuencia y `subBuffer`.
+6. Loop deep extension: lowpass profundo, highpass subsónico, sustain envelope y soft clip hacia `deepExtensionBuffer`.
+7. Loop por canal: voz limpia/protegida, programa de bajo, sub generado, shelf de graves, trim, soft clip final y DC blocker.
+8. Clamp final nativo a `[-1, 1]` como protección de salida iOS.
+
+## Diferencias conocidas
+
+- La ruta iOS usa `enabled` explícito además del bypass por intensidad. El Worklet no tenía ese parámetro porque la UI desconectaba/bypasseaba el nodo.
+- El core nativo clampa NaN/Inf y salida final a `[-1,1]`; esto es protección de plataforma y no cambia la intención sonora.
+- El AudioWorklet podía recibir buffers arbitrarios y redimensionar `Float32Array`; el core nativo preasigna `8192` frames y procesa chunks para mantener cero allocations en el render.
+- El grafo iOS usa `AVAudioSourceNode` con audio decodificado en memoria para poder insertar DSP in-place en tiempo real sin reintroducir WebAudio. La arquitectura está documentada en `IOS_AUDIO_GRAPH.md`.
