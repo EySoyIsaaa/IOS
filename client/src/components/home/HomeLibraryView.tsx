@@ -518,8 +518,8 @@ export function HomeLibraryView({
                   className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-900/50 transition-colors"
                 >
                   <div
-                    className="flex-1 flex items-center gap-3 min-w-0 cursor-pointer"
-                    onClick={() => onPlayNow(track)}
+                    key={track.id}
+                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-900/50 transition-colors"
                   >
                     <div className="w-10 h-10 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0">
                       <TrackArtwork
@@ -536,15 +536,14 @@ export function HomeLibraryView({
                         {safeArtist(track)}
                       </p>
                     </div>
+                    <button
+                      onClick={() => onRemoveFromPlaylist(track)}
+                      className="p-2 text-zinc-600 hover:text-red-400"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => onRemoveFromPlaylist(track)}
-                    className="p-2 text-zinc-600 hover:text-red-400"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ))
+                ))
             )}
           </div>
         )}
