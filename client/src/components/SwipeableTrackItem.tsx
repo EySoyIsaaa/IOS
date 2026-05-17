@@ -23,12 +23,12 @@ import { AudioQualityBadge } from "@/components/AudioQualityBadge";
 import { TrackArtwork } from "@/components/TrackArtwork";
 import { useLanguage } from "@/hooks/useLanguage";
 
-const fallbackTitle = (track?: Partial<Track> | null) =>
+const safeTitle = (track?: Partial<Track> | null): string =>
   typeof track?.title === "string" && track.title.trim()
     ? track.title
     : "Canción desconocida";
 
-const fallbackArtist = (track?: Partial<Track> | null) =>
+const safeArtist = (track?: Partial<Track> | null): string =>
   typeof track?.artist === "string" && track.artist.trim()
     ? track.artist
     : "Artista desconocido";
@@ -67,21 +67,9 @@ export function SwipeableTrackItem({
 
   const SWIPE_THRESHOLD = 80;
   const LONG_PRESS_DURATION = 500;
-  const canUseTrack =
-    typeof track?.id === "string" && track.id.trim().length > 0;
-  const displayTitle = fallbackTitle(track);
-  const displayArtist = fallbackArtist(track);
-
-  const guardedAction = useCallback(
-    (action: (safeTrack: Track) => void) => {
-      if (!canUseTrack) {
-        console.warn("[SongsScreen] invalid track skipped", { track });
-        return;
-      }
-      action(track);
-    },
-    [canUseTrack, track],
-  );
+  const canActOnTrack = Boolean(track?.id);
+  const title = safeTitle(track);
+  const artist = safeArtist(track);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0];
@@ -138,23 +126,23 @@ export function SwipeableTrackItem({
       // Ejecutar acción según el swipe
       if (swipeX < -SWIPE_THRESHOLD) {
         // Swipe izquierda -> Agregar a cola
-        guardedAction(onAddToQueue);
+        if (canActOnTrack) onAddToQueue(track);
       } else if (swipeX > SWIPE_THRESHOLD) {
         // Swipe derecha -> Reproducir siguiente
-        guardedAction(onPlayNext);
+        if (canActOnTrack) onPlayNext(track);
       }
     }
 
     // Reset
     setSwipeX(0);
     touchStartRef.current = null;
-  }, [swipeX, isLongPress, guardedAction, onAddToQueue, onPlayNext]);
+  }, [swipeX, isLongPress, track, onAddToQueue, onPlayNext, canActOnTrack]);
 
   const handleClick = useCallback(() => {
     if (!isLongPress && Math.abs(swipeX) < 10) {
-      guardedAction(onPlayNow);
+      if (canActOnTrack) onPlayNow(track);
     }
-  }, [isLongPress, swipeX, guardedAction, onPlayNow]);
+  }, [isLongPress, swipeX, track, onPlayNow, canActOnTrack]);
 
   const closeMenu = useCallback(() => {
     setShowMenu(false);
@@ -194,12 +182,12 @@ export function SwipeableTrackItem({
             }}
           >
             <div className="px-4 py-3 border-b border-zinc-800">
-              <p className="font-medium text-sm truncate">{displayTitle}</p>
-              <p className="text-xs text-zinc-500 truncate">{displayArtist}</p>
+              <p className="font-medium text-sm truncate">{title}</p>
+              <p className="text-xs text-zinc-500 truncate">{artist}</p>
             </div>
             <button
               onClick={() => {
-                guardedAction(onPlayNow);
+                if (canActOnTrack) onPlayNow(track);
                 closeMenu();
               }}
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-800 transition-colors text-left"
@@ -209,7 +197,7 @@ export function SwipeableTrackItem({
             </button>
             <button
               onClick={() => {
-                guardedAction(onPlayNext);
+                if (canActOnTrack) onPlayNext(track);
                 closeMenu();
               }}
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-800 transition-colors text-left"
@@ -219,7 +207,7 @@ export function SwipeableTrackItem({
             </button>
             <button
               onClick={() => {
-                guardedAction(onAddToQueue);
+                if (canActOnTrack) onAddToQueue(track);
                 closeMenu();
               }}
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-800 transition-colors text-left"
@@ -232,10 +220,9 @@ export function SwipeableTrackItem({
                 <div className="h-px bg-zinc-800 my-1" />
                 <button
                   onClick={() => {
-                    guardedAction(onAddToPlaylist);
+                    if (canActOnTrack) onAddToPlaylist(track);
                     closeMenu();
                   }}
-                  disabled={!canUseTrack}
                   className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-800 transition-colors text-left"
                 >
                   <ListMusic className="w-5 h-5 text-zinc-400" />
@@ -243,13 +230,12 @@ export function SwipeableTrackItem({
                 </button>
               </>
             )}
-            {track?.isEphemeral && onPersistTrack && (
+            {canActOnTrack && track.isEphemeral && onPersistTrack && (
               <button
                 onClick={() => {
-                  guardedAction(onPersistTrack);
+                  if (canActOnTrack) onPersistTrack(track);
                   closeMenu();
                 }}
-                disabled={!canUseTrack}
                 className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-800 transition-colors text-left"
               >
                 <Save className="w-5 h-5 text-zinc-400" />
@@ -305,32 +291,30 @@ export function SwipeableTrackItem({
           >
             <TrackArtwork
               src={track.coverUrl}
-              alt={displayTitle}
+              alt={title}
               iconClassName={`${compact ? "w-5 h-5" : "w-6 h-6"} text-zinc-500`}
             />
           </div>
 
           <div className="flex-1 min-w-0">
             <p className={`${compact ? "text-sm" : ""} font-medium truncate`}>
-              {displayTitle}
+              {title}
             </p>
             {showArtist && (
               <div className="flex items-center gap-2">
-                <p className="text-sm text-zinc-500 truncate">
-                  {displayArtist}
-                </p>
-                {track?.isEphemeral && (
+                <p className="text-sm text-zinc-500 truncate">{artist}</p>
+                {track.isEphemeral && (
                   <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
                     {t("actions.sessionOnly")}
                   </span>
                 )}
                 <AudioQualityBadge
-                  bitDepth={track?.bitDepth}
-                  sampleRate={track?.sampleRate}
-                  bitrate={track?.bitrate}
-                  codec={track?.codec}
-                  fileExtension={track?.fileName?.split(".").pop()}
-                  isHiRes={track?.isHiRes}
+                  bitDepth={track.bitDepth}
+                  sampleRate={track.sampleRate}
+                  bitrate={track.bitrate}
+                  codec={track.codec}
+                  fileExtension={track.fileName?.split(".").pop()}
+                  isHiRes={track.isHiRes}
                   compact
                 />
               </div>
@@ -357,14 +341,13 @@ export function SwipeableTrackItem({
             <MoreHorizontal className="w-5 h-5" />
           </button>
         </div>
-        {track?.isEphemeral && onPersistTrack && (
+        {canActOnTrack && track.isEphemeral && onPersistTrack && (
           <div className="px-3 pb-2">
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                guardedAction(onPersistTrack);
+                onPersistTrack(track);
               }}
-              disabled={!canUseTrack}
               className="w-full text-xs px-3 py-2 rounded-lg border border-amber-500/40 text-amber-200 hover:bg-amber-500/10 transition-colors flex items-center justify-center gap-2"
             >
               <Save className="w-3.5 h-3.5" />

@@ -102,21 +102,26 @@ const clampDspParams = (params: StreamingParams): StreamingParams => ({
 const MAX_SAFE_DSP_BIT_DEPTH = 24;
 const MAX_SAFE_DSP_SAMPLE_RATE = 192000;
 
-const UNKNOWN_TITLE = "Canción desconocida";
-const UNKNOWN_ARTIST = "Artista desconocido";
-
-const safeTitle = (track?: Partial<Track> | null) =>
+const safeTitle = (track?: Partial<Track> | null): string =>
   typeof track?.title === "string" && track.title.trim()
     ? track.title
-    : UNKNOWN_TITLE;
+    : "Canción desconocida";
 
-const safeArtist = (track?: Partial<Track> | null) =>
+const safeArtist = (track?: Partial<Track> | null): string =>
   typeof track?.artist === "string" && track.artist.trim()
     ? track.artist
-    : UNKNOWN_ARTIST;
+    : "Artista desconocido";
 
-const isValidTrack = (track: Track | null | undefined): track is Track =>
-  !!track && typeof track.id === "string" && track.id.trim().length > 0;
+const normalizeLibraryTrack = (
+  track: Track | null | undefined,
+): Track | null => {
+  if (!track || !track.id) return null;
+  return {
+    ...track,
+    title: safeTitle(track),
+    artist: safeArtist(track),
+  };
+};
 
 const getAudioCompatibilityUnsupportedReason = (
   track: Track,
@@ -254,14 +259,16 @@ export default function Home() {
   const lastPositionSyncRef = useRef(0);
 
   const safeLibrary = useMemo(() => {
-    const rawLibrary = Array.isArray(queue.library) ? queue.library : [];
-    return rawLibrary.filter((track): track is Track => {
-      const valid = isValidTrack(track);
-      if (!valid) {
-        console.warn("[SongsScreen] invalid track skipped", { track });
-      }
-      return valid;
-    });
+    if (!Array.isArray(queue.library)) return [];
+    return queue.library
+      .map((track) => normalizeLibraryTrack(track))
+      .filter((track): track is Track => {
+        if (!track?.id) {
+          console.warn("[SongsScreen] invalid track skipped", { track });
+          return false;
+        }
+        return true;
+      });
   }, [queue.library]);
 
   const hiResTracks = useMemo(
@@ -274,22 +281,29 @@ export default function Home() {
       libraryCount: safeLibrary.length,
       songSort,
     });
-    if (songSort === "default") return safeLibrary;
     try {
+      if (songSort === "default") return safeLibrary;
       const copy = [...safeLibrary];
-      const locale = language === "es" ? "es" : "en";
       if (songSort === "name") {
         copy.sort((a, b) =>
-          safeTitle(a).localeCompare(safeTitle(b), locale, {
-            sensitivity: "base",
-          }),
+          safeTitle(a).localeCompare(
+            safeTitle(b),
+            language === "es" ? "es" : "en",
+            {
+              sensitivity: "base",
+            },
+          ),
         );
         return copy;
       }
       copy.sort((a, b) =>
-        safeArtist(a).localeCompare(safeArtist(b), locale, {
-          sensitivity: "base",
-        }),
+        safeArtist(a).localeCompare(
+          safeArtist(b),
+          language === "es" ? "es" : "en",
+          {
+            sensitivity: "base",
+          },
+        ),
       );
       return copy;
     } catch (error) {
@@ -454,12 +468,12 @@ export default function Home() {
       onPause: () => audioProcessor.pause(),
       onNextTrack: () => {
         console.info(
-          "[MediaSession] next ignored on iOS; native MPRemoteCommandCenter owns it",
+          "[MediaSession] ignored nexttrack on iOS Capacitor; native MPRemoteCommandCenter owns it",
         );
       },
       onPreviousTrack: () => {
         console.info(
-          "[MediaSession] previous ignored on iOS; native MPRemoteCommandCenter owns it",
+          "[MediaSession] ignored previoustrack on iOS Capacitor; native MPRemoteCommandCenter owns it",
         );
       },
       onSeekTo: (time) => audioProcessor.seek(time),
@@ -574,7 +588,7 @@ export default function Home() {
 
     const queuedTrack =
       queue.queue.find((track) => track.id === nativeTrack.id) ??
-      queue.library.find((track) => track.id === nativeTrack.id);
+      safeLibrary.find((track) => track.id === nativeTrack.id);
 
     console.info("[Playback] loaded track", {
       trackId: nativeTrack.id,
@@ -590,7 +604,7 @@ export default function Home() {
   }, [
     audioProcessor.currentTrack,
     audioProcessor.currentTrackId,
-    queue.library,
+    safeLibrary,
     queue.queue,
     queue.syncCurrentTrackById,
   ]);
@@ -667,15 +681,41 @@ export default function Home() {
     ],
   );
 
+  const playNextAvailableTrackAfterFailure = useCallback(
+    (failedQueueTrackId: string) => {
+      if (queue.queue.length <= 1) {
+        return false;
+      }
+
+      const startIndex = queue.currentTrackIndex;
+      for (let offset = 1; offset < queue.queue.length; offset += 1) {
+        const candidateIndex = (startIndex + offset) % queue.queue.length;
+        const candidateTrack = queue.queue[candidateIndex];
+
+        if (!candidateTrack || candidateTrack.id === failedQueueTrackId) {
+          continue;
+        }
+
+        if (failedQueueTrackIdsRef.current.has(candidateTrack.id)) {
+          continue;
+        }
+
+        playbackReasonRef.current = "failure-skip";
+        void audioProcessor.next();
+        return true;
+      }
+
+      return false;
+    },
+    [audioProcessor, queue.currentTrackIndex, queue.queue],
+  );
+
   // Configurar callbacks cuando termina o falla una canción.
   useEffect(() => {
     audioProcessor.setOnTrackEnded(() => {
-      if (
-        queue.queue.length > 0 &&
-        queue.currentTrackIndex < queue.queue.length - 1
-      ) {
-        console.info("[Playback] autoplay confirmed by native authority");
-      }
+      console.info(
+        "[Playback] native track ended; NativePlaybackController owns auto-next",
+      );
     });
 
     audioProcessor.setOnTrackError((error) => {
@@ -699,7 +739,13 @@ export default function Home() {
       audioProcessor.setOnTrackEnded(null);
       audioProcessor.setOnTrackError(null);
     };
-  }, [audioProcessor, clearPendingPlaybackTimers, queue.currentTrack?.id, t]);
+  }, [
+    audioProcessor,
+    clearPendingPlaybackTimers,
+    playNextAvailableTrackAfterFailure,
+    queue,
+    t,
+  ]);
 
   useEffect(() => {
     if (audioProcessor.isPlaying && queue.currentTrack?.id) {

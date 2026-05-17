@@ -2,8 +2,8 @@
  * Hook para controles de reproducción en notificaciones y pantalla bloqueada.
  */
 
-import { useEffect, useCallback, useRef } from "react";
 import { Capacitor } from "@capacitor/core";
+import { useEffect, useCallback, useRef } from "react";
 
 export interface MediaMetadata {
   title: string;
@@ -32,6 +32,9 @@ export interface MediaSessionController {
   ) => void;
   setHandlers: (handlers: MediaSessionHandlers) => void;
 }
+
+const isIosCapacitor = () =>
+  Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios";
 
 const FALLBACK_ARTWORK =
   "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><defs><linearGradient id='g' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%2306b6d4'/><stop offset='100%' stop-color='%238b5cf6'/></linearGradient></defs><rect width='512' height='512' rx='120' fill='%2309090b'/><circle cx='256' cy='256' r='164' fill='none' stroke='url(%23g)' stroke-width='28'/><path d='M184 308h24l18-96 30 140 28-116 16 72h28' fill='none' stroke='url(%23g)' stroke-linecap='round' stroke-linejoin='round' stroke-width='26'/></svg>";
@@ -64,8 +67,6 @@ const inferArtworkType = (src: string) => {
 export function useMediaSession(): MediaSessionController {
   const handlersRef = useRef<MediaSessionHandlers>({});
   const isSupported = "mediaSession" in navigator;
-  const isIOSCapacitor =
-    Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios";
 
   useEffect(() => {
     if (!isSupported) return;
@@ -73,16 +74,20 @@ export function useMediaSession(): MediaSessionController {
     const session = navigator.mediaSession;
     session.setActionHandler("play", () => handlersRef.current.onPlay?.());
     session.setActionHandler("pause", () => handlersRef.current.onPause?.());
-    // iOS Capacitor must not let Web MediaSession own queue navigation;
-    // MPRemoteCommandCenter in Swift is the only source of truth for next/previous.
-    session.setActionHandler(
-      "previoustrack",
-      isIOSCapacitor ? null : () => handlersRef.current.onPreviousTrack?.(),
-    );
-    session.setActionHandler(
-      "nexttrack",
-      isIOSCapacitor ? null : () => handlersRef.current.onNextTrack?.(),
-    );
+    if (isIosCapacitor()) {
+      // iOS native MPRemoteCommandCenter is the only authority for headphones,
+      // Control Center and lock screen next/previous. Web MediaSession must not
+      // move the React queue on Capacitor iOS.
+      session.setActionHandler("previoustrack", null);
+      session.setActionHandler("nexttrack", null);
+    } else {
+      session.setActionHandler("previoustrack", () =>
+        handlersRef.current.onPreviousTrack?.(),
+      );
+      session.setActionHandler("nexttrack", () =>
+        handlersRef.current.onNextTrack?.(),
+      );
+    }
     session.setActionHandler("seekto", (details) => {
       if (details.seekTime !== undefined)
         handlersRef.current.onSeekTo?.(details.seekTime);
@@ -103,7 +108,7 @@ export function useMediaSession(): MediaSessionController {
       session.setActionHandler("seekbackward", null);
       session.setActionHandler("seekforward", null);
     };
-  }, [isSupported, isIOSCapacitor]);
+  }, [isSupported]);
 
   const updateMetadata = useCallback(
     (metadata: MediaMetadata) => {
@@ -123,7 +128,7 @@ export function useMediaSession(): MediaSessionController {
         })),
       });
     },
-    [isSupported, isIOSCapacitor],
+    [isSupported],
   );
 
   const updatePlaybackState = useCallback(
@@ -131,7 +136,7 @@ export function useMediaSession(): MediaSessionController {
       if (!isSupported) return;
       navigator.mediaSession.playbackState = state;
     },
-    [isSupported, isIOSCapacitor],
+    [isSupported],
   );
 
   const updatePosition = useCallback(
@@ -148,7 +153,7 @@ export function useMediaSession(): MediaSessionController {
         // Not supported in all browsers.
       }
     },
-    [isSupported, isIOSCapacitor],
+    [isSupported],
   );
 
   const setHandlers = useCallback((handlers: MediaSessionHandlers) => {

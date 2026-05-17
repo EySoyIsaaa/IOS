@@ -1,4 +1,4 @@
-import React from "react";
+import { Component, type ReactNode } from "react";
 import {
   ChevronRight,
   Disc3,
@@ -27,35 +27,43 @@ import type {
   TranslateFn,
 } from "@/components/home/types";
 
-const isRenderableTrack = (track: Track | null | undefined): track is Track =>
-  !!track && typeof track.id === "string" && track.id.trim().length > 0;
+const safeTitle = (track?: Partial<Track> | null): string =>
+  typeof track?.title === "string" && track.title.trim()
+    ? track.title
+    : "Canción desconocida";
 
-class SongsLibraryScreenErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { error: Error | null }
+const safeArtist = (track?: Partial<Track> | null): string =>
+  typeof track?.artist === "string" && track.artist.trim()
+    ? track.artist
+    : "Artista desconocido";
+
+const isPlayableTrack = (track?: Track | null): track is Track =>
+  Boolean(track?.id);
+
+class SongsLibraryErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
 > {
-  state = { error: null };
+  state = { hasError: false };
 
-  static getDerivedStateFromError(error: Error) {
-    return { error };
+  static getDerivedStateFromError() {
+    return { hasError: true };
   }
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error("[SongsScreen] render state", {
-      message: error.message,
-      stack: error.stack,
-      componentStack: info.componentStack,
-    });
+  componentDidCatch(error: Error, info: unknown) {
+    console.error("[SongsScreen] render state", { error, info });
   }
 
   render() {
-    if (!this.state.error) return this.props.children;
-    return (
-      <div className="rounded-2xl border border-red-500/30 bg-red-950/20 p-4 text-sm text-red-100">
-        No se pudo renderizar la lista de canciones. Intenta recargar la
-        biblioteca.
-      </div>
-    );
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 text-center text-sm text-zinc-400">
+          No se pudo renderizar la lista de canciones. Intenta volver a abrir la
+          biblioteca.
+        </div>
+      );
+    }
+    return this.props.children;
   }
 }
 
@@ -128,6 +136,14 @@ export function HomeLibraryView({
   onRemoveFromPlaylist,
   hiresLogoUrl,
 }: HomeLibraryViewProps) {
+  const validSortedSongs = sortedSongs.filter((track, index) => {
+    if (!isPlayableTrack(track)) {
+      console.warn("[SongsScreen] invalid track skipped", { index, track });
+      return false;
+    }
+    return true;
+  });
+
   return (
     <div
       className="flex-1 flex flex-col home-scroll-with-player"
@@ -502,16 +518,16 @@ export function HomeLibraryView({
                     <div className="w-10 h-10 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0">
                       <TrackArtwork
                         src={track.coverUrl}
-                        alt={track.title}
+                        alt={safeTitle(track)}
                         iconClassName="w-5 h-5 text-zinc-500"
                       />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">
-                        {track.title}
+                        {safeTitle(track)}
                       </p>
                       <p className="text-xs text-zinc-500 truncate">
-                        {track.artist}
+                        {safeArtist(track)}
                       </p>
                     </div>
                   </div>
@@ -528,20 +544,20 @@ export function HomeLibraryView({
         )}
 
         {libraryView === "songs" && (
-          <SongsLibraryScreenErrorBoundary>
+          <SongsLibraryErrorBoundary>
             <div className="p-4 space-y-1">
-              {sortedSongs.length > 0 && (
+              {validSortedSongs.length > 0 && (
                 <>
                   <div className="flex flex-wrap items-center gap-3 mb-4">
                     <button
-                      onClick={() => onPlayInOrder(sortedSongs)}
+                      onClick={() => onPlayInOrder(validSortedSongs)}
                       className="flex items-center gap-2 px-5 py-2 rounded-full bg-[var(--ep-red)] text-white font-semibold shadow-sm"
                     >
                       <Play className="w-4 h-4" fill="currentColor" />
                       {t("actions.play")}
                     </button>
                     <button
-                      onClick={() => onShufflePlay(sortedSongs)}
+                      onClick={() => onShufflePlay(validSortedSongs)}
                       className="flex items-center gap-2 px-5 py-2 rounded-full border border-[var(--ep-border)] text-white"
                     >
                       <Shuffle className="w-4 h-4" />
@@ -572,27 +588,19 @@ export function HomeLibraryView({
                   </div>
                 </>
               )}
-              {sortedSongs.length > 0 && (
+              {validSortedSongs.length > 0 && (
                 <p className="text-xs text-zinc-600 text-center mb-3 px-4">
                   {t("library.swipeHint")}
                 </p>
               )}
-              {sortedSongs
+              {validSortedSongs
                 .slice(0, visibleSongsCount)
-                .filter((track) => {
-                  const valid = isRenderableTrack(track);
-                  if (!valid)
-                    console.warn("[SongsScreen] invalid track skipped", {
-                      track,
-                    });
-                  return valid;
-                })
                 .map((track, index) => (
                   <SwipeableTrackItem
                     key={
                       track.id ||
                       track.sourceTrackId ||
-                      `${track.title}-${index}`
+                      `${safeTitle(track)}-${index}`
                     }
                     track={track}
                     onPlayNow={onPlayNow}
@@ -602,7 +610,7 @@ export function HomeLibraryView({
                     onPersistTrack={onPersistEphemeralTrack}
                   />
                 ))}
-              {visibleSongsCount < sortedSongs.length && (
+              {visibleSongsCount < validSortedSongs.length && (
                 <div className="py-4 text-center">
                   <button
                     onClick={() => setVisibleSongsCount((prev) => prev + 250)}
@@ -611,14 +619,14 @@ export function HomeLibraryView({
                     {t("library.loadMoreSongs", {
                       count: Math.min(
                         250,
-                        sortedSongs.length - visibleSongsCount,
+                        validSortedSongs.length - visibleSongsCount,
                       ),
                     })}
                   </button>
                 </div>
               )}
             </div>
-          </SongsLibraryScreenErrorBoundary>
+          </SongsLibraryErrorBoundary>
         )}
 
         {libraryView === "hires" && (

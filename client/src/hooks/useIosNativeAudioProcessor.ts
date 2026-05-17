@@ -76,68 +76,151 @@ export function useIosNativeAudioProcessor() {
   const onTrackErrorRef = useRef<((error: unknown) => void) | null>(null);
   const lastAppliedTrackIdRef = useRef<string | null>(null);
   const nativeTransitionRequestRef = useRef(0);
-  const [isNativeTransitionInProgress, setIsNativeTransitionInProgress] =
-    useState(false);
+  const nativeTransitionContextRef = useRef<{
+    requestId: number;
+    reason: string;
+    fromTrackId: string | null;
+    expectedTrackId: string | null;
+  } | null>(null);
+  const nativeTransitionTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
-  const applyState = useCallback((state: IOSNativePlaybackState) => {
-    logState(state);
-    const incomingTrackId =
-      state.currentTrackId ?? state.currentTrack?.id ?? null;
-    const duplicateCurrentTrack =
-      incomingTrackId && incomingTrackId === lastAppliedTrackIdRef.current;
-    setIsPlaying(!!state.isPlaying);
-    setCurrentTime(state.currentTime || 0);
-    setDuration(
-      state.duration || (state.durationMs ? state.durationMs / 1000 : 0),
-    );
-    setCurrentTrackId(incomingTrackId);
-    if (!duplicateCurrentTrack) {
-      lastAppliedTrackIdRef.current = incomingTrackId;
-      setCurrentTrack(
-        state.currentTrack ? nativeTrackToAppTrack(state.currentTrack) : null,
-      );
-    }
-    setIsNativeTransitionInProgress(false);
-    if (state.epicenter) {
-      setEpicenterEnabledState(!!state.epicenter.enabled);
-    }
-    if (state.eq) {
-      setEqEnabledState(!!state.eq.enabled);
-      if (
-        Array.isArray(state.eq.bands) &&
-        state.eq.bands.length === DEFAULT_EQ_BANDS.length
-      ) {
-        setEqBands((prev) => {
-          const nextGains = state.eq?.bands ?? [];
-          const unchanged = prev.every(
-            (band, index) => band.gain === (nextGains[index] ?? 0),
-          );
-          return unchanged
-            ? prev
-            : prev.map((band, index) => ({
-                ...band,
-                gain: nextGains[index] ?? 0,
-              }));
-        });
-      }
-    }
-    if (state.fx) {
-      setSpatialEffects((prev) => {
-        const next = {
-          reverbEnabled: !!state.fx?.reverbEnabled,
-          reverbAmount: state.fx?.reverbAmount ?? 0,
-          concertHallEnabled: !!state.fx?.concertHallEnabled,
-          concertHallAmount: state.fx?.concertHallAmount ?? 0,
-        };
-        return prev.reverbEnabled === next.reverbEnabled &&
-          prev.reverbAmount === next.reverbAmount &&
-          prev.concertHallEnabled === next.concertHallEnabled &&
-          prev.concertHallAmount === next.concertHallAmount
-          ? prev
-          : next;
-      });
+  const clearNativeTransition = useCallback(() => {
+    if (nativeTransitionTimeoutRef.current) {
+      clearTimeout(nativeTransitionTimeoutRef.current);
+      nativeTransitionTimeoutRef.current = null;
     }
   }, []);
+
+  const finishNativeTransition = useCallback(
+    (trackId: string | null) => {
+      if (!nativeTransitionRequestRef.current) return;
+      console.info("[iOS Native Playback] transition confirmed", {
+        requestId: nativeTransitionRequestRef.current,
+        currentTrackId: trackId,
+      });
+      nativeTransitionRequestRef.current = 0;
+      nativeTransitionContextRef.current = null;
+      clearNativeTransition();
+    },
+    [clearNativeTransition],
+  );
+
+  const shouldConfirmNativeTransition = useCallback(
+    (trackId: string | null) => {
+      const context = nativeTransitionContextRef.current;
+      if (!context || !trackId) return false;
+      if (context.expectedTrackId) return trackId === context.expectedTrackId;
+      return trackId !== context.fromTrackId;
+    },
+    [],
+  );
+
+  const beginNativeTransition = useCallback(
+    (reason: string, expectedTrackId: string | null = null) => {
+      const requestId = nativeTransitionRequestRef.current + 1;
+      nativeTransitionRequestRef.current = requestId;
+      nativeTransitionContextRef.current = {
+        requestId,
+        reason,
+        fromTrackId: currentTrackId,
+        expectedTrackId,
+      };
+      clearNativeTransition();
+      nativeTransitionTimeoutRef.current = setTimeout(() => {
+        if (nativeTransitionRequestRef.current === requestId) {
+          console.info("[iOS Native Playback] transition settled by timeout", {
+            reason,
+            requestId,
+          });
+          nativeTransitionRequestRef.current = 0;
+          nativeTransitionContextRef.current = null;
+        }
+      }, 1500);
+      console.info("[iOS Native Playback] transition requested", {
+        reason,
+        requestId,
+        fromTrackId: currentTrackId,
+        expectedTrackId,
+      });
+      return requestId;
+    },
+    [clearNativeTransition, currentTrackId],
+  );
+
+  const applyState = useCallback(
+    (state: IOSNativePlaybackState) => {
+      logState(state);
+      setIsPlaying(!!state.isPlaying);
+      setCurrentTime(state.currentTime || 0);
+      setDuration(
+        state.duration || (state.durationMs ? state.durationMs / 1000 : 0),
+      );
+      const nextTrackId =
+        state.currentTrackId ?? state.currentTrack?.id ?? null;
+      setCurrentTrackId(nextTrackId);
+      if (state.currentTrack) {
+        if (
+          lastAppliedTrackIdRef.current === state.currentTrack.id &&
+          currentTrackId === state.currentTrack.id
+        ) {
+          console.info("[Bridge] event ignored duplicate currentTrack", {
+            trackId: state.currentTrack.id,
+          });
+        } else {
+          lastAppliedTrackIdRef.current = state.currentTrack.id;
+          setCurrentTrack(nativeTrackToAppTrack(state.currentTrack));
+        }
+      } else {
+        lastAppliedTrackIdRef.current = null;
+        setCurrentTrack(null);
+      }
+      if (shouldConfirmNativeTransition(nextTrackId)) {
+        finishNativeTransition(nextTrackId);
+      }
+      if (state.epicenter) {
+        setEpicenterEnabledState(!!state.epicenter.enabled);
+      }
+      if (state.eq) {
+        setEqEnabledState(!!state.eq.enabled);
+        if (
+          Array.isArray(state.eq.bands) &&
+          state.eq.bands.length === DEFAULT_EQ_BANDS.length
+        ) {
+          setEqBands((prev) => {
+            const nextGains = state.eq?.bands ?? [];
+            const unchanged = prev.every(
+              (band, index) => band.gain === (nextGains[index] ?? 0),
+            );
+            return unchanged
+              ? prev
+              : prev.map((band, index) => ({
+                  ...band,
+                  gain: nextGains[index] ?? 0,
+                }));
+          });
+        }
+      }
+      if (state.fx) {
+        setSpatialEffects((prev) => {
+          const next = {
+            reverbEnabled: !!state.fx?.reverbEnabled,
+            reverbAmount: state.fx?.reverbAmount ?? 0,
+            concertHallEnabled: !!state.fx?.concertHallEnabled,
+            concertHallAmount: state.fx?.concertHallAmount ?? 0,
+          };
+          return prev.reverbEnabled === next.reverbEnabled &&
+            prev.reverbAmount === next.reverbAmount &&
+            prev.concertHallEnabled === next.concertHallEnabled &&
+            prev.concertHallAmount === next.concertHallAmount
+            ? prev
+            : next;
+        });
+      }
+    },
+    [currentTrackId, finishNativeTransition, shouldConfirmNativeTransition],
+  );
 
   const reportError = useCallback((error: unknown) => {
     console.error("[iOS Native Playback] error", error);
@@ -162,18 +245,24 @@ export function useIosNativeAudioProcessor() {
     void EpicenterNative.addListener("playbackStateChanged", applyState).then(
       (handle) => handles.push(handle),
     );
+    void EpicenterNative.addListener("currentTrackChanged", (event) => {
+      if (!event.track?.id) return;
+      if (lastAppliedTrackIdRef.current === event.track.id) {
+        console.info("[Bridge] event ignored duplicate currentTrackChanged", {
+          trackId: event.track.id,
+        });
+        return;
+      }
+      lastAppliedTrackIdRef.current = event.track.id;
+      setCurrentTrackId(event.track.id);
+      setCurrentTrack(nativeTrackToAppTrack(event.track));
+      if (shouldConfirmNativeTransition(event.track.id)) {
+        finishNativeTransition(event.track.id);
+      }
+    }).then((handle) => handles.push(handle));
     void EpicenterNative.addListener("progressChanged", applyState).then(
       (handle) => handles.push(handle),
     );
-    void EpicenterNative.addListener("currentTrackChanged", (event) => {
-      const appTrack = event.track ? nativeTrackToAppTrack(event.track) : null;
-      const trackId = appTrack?.id ?? null;
-      if (trackId && trackId === lastAppliedTrackIdRef.current) return;
-      lastAppliedTrackIdRef.current = trackId;
-      setCurrentTrackId(trackId);
-      setCurrentTrack(appTrack);
-      setIsNativeTransitionInProgress(false);
-    }).then((handle) => handles.push(handle));
     void EpicenterNative.addListener("playbackError", (event) =>
       reportError(event),
     ).then((handle) => handles.push(handle));
@@ -181,28 +270,31 @@ export function useIosNativeAudioProcessor() {
     return () => {
       for (const handle of handles) void handle.remove();
     };
-  }, [applyState, getPlaybackState, reportError]);
+  }, [
+    applyState,
+    finishNativeTransition,
+    getPlaybackState,
+    reportError,
+    shouldConfirmNativeTransition,
+  ]);
 
   const playTrackId = useCallback(
     async (trackId: string) => {
-      const requestId = ++nativeTransitionRequestRef.current;
-      setIsNativeTransitionInProgress(true);
+      const requestId = beginNativeTransition("playTrackId", trackId);
       console.info("[iOS Native Playback] play trackId", {
         trackId,
         requestId,
       });
       try {
         const state = await EpicenterNative.play({ trackId });
-        if (requestId === nativeTransitionRequestRef.current) applyState(state);
+        applyState(state);
         return true;
       } catch (error) {
-        if (requestId === nativeTransitionRequestRef.current)
-          setIsNativeTransitionInProgress(false);
         reportError(error);
         return false;
       }
     },
-    [applyState, reportError],
+    [applyState, beginNativeTransition, reportError],
   );
 
   const play = useCallback(async () => {
@@ -212,7 +304,7 @@ export function useIosNativeAudioProcessor() {
       const state = await EpicenterNative.play(
         currentTrackId ? { trackId: currentTrackId } : undefined,
       );
-      if (requestId === nativeTransitionRequestRef.current) applyState(state);
+      applyState(state);
     } catch (error) {
       if (requestId === nativeTransitionRequestRef.current)
         setIsNativeTransitionInProgress(false);
@@ -235,26 +327,20 @@ export function useIosNativeAudioProcessor() {
 
   const seek = useCallback(
     async (seconds: number) => {
-      const requestId = ++nativeTransitionRequestRef.current;
-      setIsNativeTransitionInProgress(true);
       try {
         const state = await EpicenterNative.seek({ seconds });
-        if (requestId === nativeTransitionRequestRef.current) applyState(state);
+        applyState(state);
       } catch (error) {
-        if (requestId === nativeTransitionRequestRef.current)
-          setIsNativeTransitionInProgress(false);
         reportError(error);
       }
     },
     [applyState, reportError],
   );
 
-  const next = useCallback(async () => {
-    const requestId = ++nativeTransitionRequestRef.current;
-    setIsNativeTransitionInProgress(true);
+  const stop = useCallback(async () => {
     try {
-      const state = await EpicenterNative.next();
-      if (requestId === nativeTransitionRequestRef.current) applyState(state);
+      const state = await EpicenterNative.stop();
+      applyState(state);
     } catch (error) {
       if (requestId === nativeTransitionRequestRef.current)
         setIsNativeTransitionInProgress(false);
@@ -275,14 +361,35 @@ export function useIosNativeAudioProcessor() {
     }
   }, [applyState, reportError]);
 
-  const stop = useCallback(async () => {
+  const next = useCallback(async () => {
+    const requestId = beginNativeTransition("next");
     try {
-      const state = await EpicenterNative.stop();
+      const state = await EpicenterNative.next();
       applyState(state);
     } catch (error) {
+      if (nativeTransitionRequestRef.current === requestId) {
+        nativeTransitionRequestRef.current = 0;
+        nativeTransitionContextRef.current = null;
+      }
+      clearNativeTransition();
       reportError(error);
     }
-  }, [applyState, reportError]);
+  }, [applyState, beginNativeTransition, clearNativeTransition, reportError]);
+
+  const previous = useCallback(async () => {
+    const requestId = beginNativeTransition("previous");
+    try {
+      const state = await EpicenterNative.previous();
+      applyState(state);
+    } catch (error) {
+      if (nativeTransitionRequestRef.current === requestId) {
+        nativeTransitionRequestRef.current = 0;
+        nativeTransitionContextRef.current = null;
+      }
+      clearNativeTransition();
+      reportError(error);
+    }
+  }, [applyState, beginNativeTransition, clearNativeTransition, reportError]);
 
   const setEqBandGain = useCallback(
     (index: number, gain: number) => {
@@ -382,7 +489,6 @@ export function useIosNativeAudioProcessor() {
       isPlaying,
       currentTrackId,
       currentTrack,
-      isNativeTransitionInProgress,
       epicenterEnabled,
       eqEnabled,
       eqBands,
@@ -391,9 +497,9 @@ export function useIosNativeAudioProcessor() {
       play,
       pause,
       seek,
+      stop,
       next,
       previous,
-      stop,
       getPlaybackState,
       loadFile: async () => true,
       getActiveSource: () => currentTrackId ?? "",
@@ -423,7 +529,6 @@ export function useIosNativeAudioProcessor() {
       isPlaying,
       currentTrackId,
       currentTrack,
-      isNativeTransitionInProgress,
       epicenterEnabled,
       eqEnabled,
       eqBands,
@@ -432,9 +537,9 @@ export function useIosNativeAudioProcessor() {
       play,
       pause,
       seek,
+      stop,
       next,
       previous,
-      stop,
       getPlaybackState,
       setEpicenterEnabled,
       setDspParam,
