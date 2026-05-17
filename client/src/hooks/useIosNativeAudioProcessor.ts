@@ -23,11 +23,21 @@ export interface SpatialEffectsConfig {
   concertHallAmount: number;
 }
 
-const DEFAULT_EQ_BANDS: EqBand[] = [
-  32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000,
-].map((frequency) => ({
+const EQ_FREQUENCIES = [
+  20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630,
+  800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000,
+  12500, 16000, 20000,
+];
+
+const formatEqLabel = (frequency: number) => {
+  if (frequency < 1000) return `${frequency} Hz`;
+  const khz = frequency / 1000;
+  return `${Number.isInteger(khz) ? khz.toFixed(0) : khz.toString()} kHz`;
+};
+
+const DEFAULT_EQ_BANDS: EqBand[] = EQ_FREQUENCIES.map((frequency) => ({
   frequency,
-  label: frequency >= 1000 ? `${frequency / 1000} kHz` : `${frequency} Hz`,
+  label: formatEqLabel(frequency),
   gain: 0,
 }));
 
@@ -62,6 +72,32 @@ export function useIosNativeAudioProcessor() {
     setCurrentTrack(state.currentTrack ? nativeTrackToAppTrack(state.currentTrack) : null);
     if (state.epicenter) {
       setEpicenterEnabledState(!!state.epicenter.enabled);
+    }
+    if (state.eq) {
+      setEqEnabledState(!!state.eq.enabled);
+      if (Array.isArray(state.eq.bands) && state.eq.bands.length === DEFAULT_EQ_BANDS.length) {
+        setEqBands((prev) => {
+          const nextGains = state.eq?.bands ?? [];
+          const unchanged = prev.every((band, index) => band.gain === (nextGains[index] ?? 0));
+          return unchanged ? prev : prev.map((band, index) => ({ ...band, gain: nextGains[index] ?? 0 }));
+        });
+      }
+    }
+    if (state.fx) {
+      setSpatialEffects((prev) => {
+        const next = {
+          reverbEnabled: !!state.fx?.reverbEnabled,
+          reverbAmount: state.fx?.reverbAmount ?? 0,
+          concertHallEnabled: !!state.fx?.concertHallEnabled,
+          concertHallAmount: state.fx?.concertHallAmount ?? 0,
+        };
+        return prev.reverbEnabled === next.reverbEnabled &&
+          prev.reverbAmount === next.reverbAmount &&
+          prev.concertHallEnabled === next.concertHallEnabled &&
+          prev.concertHallAmount === next.concertHallAmount
+          ? prev
+          : next;
+      });
     }
   }, []);
 
@@ -144,7 +180,8 @@ export function useIosNativeAudioProcessor() {
 
   const setEqBandGain = useCallback((index: number, gain: number) => {
     setEqBands((prev) => prev.map((band, bandIndex) => bandIndex === index ? { ...band, gain } : band));
-  }, []);
+    void EpicenterNative.setEqBand({ index, gain }).catch(reportError);
+  }, [reportError]);
 
   useEffect(() => {
     if (!eqEnabled) return;
@@ -163,12 +200,33 @@ export function useIosNativeAudioProcessor() {
 
   const setEqEnabled = useCallback((enabled: boolean) => {
     setEqEnabledState(enabled);
+    void EpicenterNative.setEqEnabled({ enabled }).catch(reportError);
     if (enabled) void EpicenterNative.setEqBands({ gains: eqBands.map((band) => band.gain) }).catch(reportError);
   }, [eqBands, reportError]);
 
   const setReverbEnabled = useCallback((enabled: boolean) => {
     setSpatialEffects((prev) => ({ ...prev, reverbEnabled: enabled }));
     void EpicenterNative.setReverbEnabled({ enabled }).catch(reportError);
+  }, [reportError]);
+
+  const setReverbAmount = useCallback((amount: number) => {
+    setSpatialEffects((prev) => ({ ...prev, reverbAmount: amount }));
+    void EpicenterNative.setReverbAmount({ amount }).catch(reportError);
+  }, [reportError]);
+
+  const setConcertHallEnabled = useCallback((enabled: boolean) => {
+    setSpatialEffects((prev) => ({ ...prev, concertHallEnabled: enabled }));
+    void EpicenterNative.setConcertHallEnabled({ enabled }).catch(reportError);
+  }, [reportError]);
+
+  const setConcertHallAmount = useCallback((amount: number) => {
+    setSpatialEffects((prev) => ({ ...prev, concertHallAmount: amount }));
+    void EpicenterNative.setConcertHallAmount({ amount }).catch(reportError);
+  }, [reportError]);
+
+  const resetEq = useCallback(() => {
+    setEqBands(DEFAULT_EQ_BANDS);
+    void EpicenterNative.resetEq().catch(reportError);
   }, [reportError]);
 
   return useMemo(() => ({
@@ -199,10 +257,11 @@ export function useIosNativeAudioProcessor() {
     setEqEnabled,
     setEqBandGain,
     setEqPreampDb: (_value?: number) => {},
+    resetEq,
     setReverbEnabled,
-    setReverbAmount: (amount: number) => setSpatialEffects((prev) => ({ ...prev, reverbAmount: amount })),
-    setConcertHallEnabled: (enabled: boolean) => setSpatialEffects((prev) => ({ ...prev, concertHallEnabled: enabled })),
-    setConcertHallAmount: (amount: number) => setSpatialEffects((prev) => ({ ...prev, concertHallAmount: amount })),
+    setReverbAmount,
+    setConcertHallEnabled,
+    setConcertHallAmount,
   }), [
     currentTime,
     duration,
@@ -223,6 +282,10 @@ export function useIosNativeAudioProcessor() {
     setDspParam,
     setEqEnabled,
     setEqBandGain,
+    resetEq,
     setReverbEnabled,
+    setReverbAmount,
+    setConcertHallEnabled,
+    setConcertHallAmount,
   ]);
 }

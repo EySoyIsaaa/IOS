@@ -34,7 +34,7 @@ export function HomeDspView({
   const secondaryParams = params.filter((param) => param.key !== mainParam.key);
 
   return (
-    <div ref={viewRef} className="flex-1 overflow-y-auto px-4 pb-32 pt-12" data-testid="dsp-view">
+    <div ref={viewRef} className="flex-1 overflow-y-auto px-4 home-scroll-with-player pt-12" data-testid="dsp-view">
       <header className="mb-5 flex items-start justify-between gap-4">
         <div>
           <p className="premium-title text-[10px] font-black text-[var(--ep-red)]">EpicenterDSP 7.0</p>

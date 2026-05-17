@@ -42,7 +42,7 @@ export function HomeSettingsView({
       <header className="px-6 pt-12 pb-6 border-b border-zinc-900">
         <h2 className="text-xl font-bold">{t("settings.title")}</h2>
       </header>
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6 home-scroll-with-player">
         {switchable && (
           <div className="bg-zinc-900/50 rounded-2xl p-4">
             <div className="flex items-center gap-3 mb-4">
