@@ -512,29 +512,31 @@ export function HomeLibraryView({
                 <p className="text-zinc-500 mb-2">{t("playlists.empty")}</p>
               </div>
             ) : (
-              selectedPlaylistTracks.map((track) => (
-                <div
-                  key={track.id}
-                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-900/50 transition-colors"
-                >
+              selectedPlaylistTracks.map((track) => {
+                return (
                   <div
                     key={track.id}
                     className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-900/50 transition-colors"
                   >
-                    <div className="w-10 h-10 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0">
-                      <TrackArtwork
-                        src={track.coverUrl}
-                        alt={safeTitle(track)}
-                        iconClassName="w-5 h-5 text-zinc-500"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {safeTitle(track)}
-                      </p>
-                      <p className="text-xs text-zinc-500 truncate">
-                        {safeArtist(track)}
-                      </p>
+                    <div
+                      className="flex-1 flex items-center gap-3 min-w-0 cursor-pointer"
+                      onClick={() => onPlayNow(track)}
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0">
+                        <TrackArtwork
+                          src={track.coverUrl}
+                          alt={safeTitle(track)}
+                          iconClassName="w-5 h-5 text-zinc-500"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {safeTitle(track)}
+                        </p>
+                        <p className="text-xs text-zinc-500 truncate">
+                          {safeArtist(track)}
+                        </p>
+                      </div>
                     </div>
                     <button
                       onClick={() => onRemoveFromPlaylist(track)}
@@ -543,7 +545,8 @@ export function HomeLibraryView({
                       <X className="w-4 h-4" />
                     </button>
                   </div>
-                ))
+                );
+              })
             )}
           </div>
         )}
