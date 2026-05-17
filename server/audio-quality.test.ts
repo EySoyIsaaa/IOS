@@ -1,30 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatQualityLabel,
+  HI_RES_FALLBACK_SAMPLE_RATE,
   HI_RES_MIN_BIT_DEPTH,
   HI_RES_MIN_SAMPLE_RATE,
   isHiResQuality,
+  qualityTier,
 } from '../shared/audioQuality';
 
 /**
  * Tests para los indicadores de calidad de audio (bits/kHz y Hi-Res)
- * Regla única del proyecto: Hi-Res = >= 16-bit y >= 44.1kHz
+ * Regla única del proyecto: Hi-Res = >= 24-bit y >= 48kHz,
+ * con fallback lossless >= 88.2kHz cuando no hay bit depth confiable.
  */
 
 describe('Audio Quality Indicators', () => {
   describe('Unified Hi-Res rule thresholds', () => {
-    it('uses 16-bit as minimum bit depth', () => {
-      expect(HI_RES_MIN_BIT_DEPTH).toBe(16);
+    it('uses 24-bit as minimum bit depth', () => {
+      expect(HI_RES_MIN_BIT_DEPTH).toBe(24);
     });
 
-    it('uses 44.1kHz as minimum sample rate', () => {
-      expect(HI_RES_MIN_SAMPLE_RATE).toBe(44100);
+    it('uses 48kHz as minimum sample rate', () => {
+      expect(HI_RES_MIN_SAMPLE_RATE).toBe(48000);
+    });
+
+    it('uses 88.2kHz as the lossless fallback sample rate', () => {
+      expect(HI_RES_FALLBACK_SAMPLE_RATE).toBe(88200);
     });
   });
 
   describe('Hi-Res Audio Detection', () => {
-    it('identifies 16-bit 44.1kHz as Hi-Res', () => {
-      expect(isHiResQuality(16, 44100)).toBe(true);
+    it('identifies 16-bit 44.1kHz as CD quality, not Hi-Res', () => {
+      expect(isHiResQuality(16, 44100)).toBe(false);
+      expect(qualityTier(16, 44100)).toBe('cd');
     });
 
     it('identifies 24-bit 48kHz as Hi-Res', () => {
@@ -43,7 +51,12 @@ describe('Audio Quality Indicators', () => {
       expect(isHiResQuality(8, 44100)).toBe(false);
     });
 
-    it('handles missing bit depth', () => {
+    it('requires lossless format for high sample-rate fallback without bit depth', () => {
+      expect(isHiResQuality(undefined, 96000, 'flac')).toBe(true);
+      expect(isHiResQuality(undefined, 96000, 'aac')).toBe(false);
+    });
+
+    it('handles missing bit depth below fallback sample rate', () => {
       expect(isHiResQuality(undefined, 48000)).toBe(false);
     });
 

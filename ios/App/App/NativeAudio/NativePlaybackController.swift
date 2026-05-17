@@ -129,6 +129,101 @@ final class NativePlaybackController {
         }
     }
 
+    func setEpicenterEnabled(_ enabled: Bool) -> [String: Any] {
+        queue.sync {
+            let response = engine.setEpicenterEnabled(enabled)
+            emit("playbackStateChanged", engine.playbackState(queue: queueManager.dictionary))
+            return response
+        }
+    }
+
+    func setEpicenterParams(intensity: Double?, sweepFreq: Double?, width: Double?, balance: Double?, volume: Double?) -> [String: Any] {
+        queue.sync {
+            let response = engine.setEpicenterParams(
+                intensity: intensity,
+                sweepFreq: sweepFreq,
+                width: width,
+                balance: balance,
+                volume: volume
+            )
+            emit("playbackStateChanged", engine.playbackState(queue: queueManager.dictionary))
+            return response
+        }
+    }
+
+
+    func setEqEnabled(_ enabled: Bool) -> [String: Any] {
+        queue.sync {
+            let response = engine.setEqEnabled(enabled)
+            emit("playbackStateChanged", engine.playbackState(queue: queueManager.dictionary))
+            return response
+        }
+    }
+
+    func setEqBand(index: Int, gain: Double) -> [String: Any] {
+        queue.sync {
+            let response = engine.setEqBand(index: index, gain: gain)
+            emit("playbackStateChanged", engine.playbackState(queue: queueManager.dictionary))
+            return response
+        }
+    }
+
+    func setEqBands(_ gains: [Double]) -> [String: Any] {
+        queue.sync {
+            let response = engine.setEqBands(gains)
+            emit("playbackStateChanged", engine.playbackState(queue: queueManager.dictionary))
+            return response
+        }
+    }
+
+    func setEqPreset(name: String?, gains: [Double]) -> [String: Any] {
+        queue.sync {
+            let response = engine.setEqPreset(name: name, gains: gains)
+            emit("playbackStateChanged", engine.playbackState(queue: queueManager.dictionary))
+            return response
+        }
+    }
+
+    func resetEq() -> [String: Any] {
+        queue.sync {
+            let response = engine.resetEq()
+            emit("playbackStateChanged", engine.playbackState(queue: queueManager.dictionary))
+            return response
+        }
+    }
+
+    func setReverbEnabled(_ enabled: Bool) -> [String: Any] {
+        queue.sync {
+            let response = engine.setReverbEnabled(enabled)
+            emit("playbackStateChanged", engine.playbackState(queue: queueManager.dictionary))
+            return response
+        }
+    }
+
+    func setReverbAmount(_ amount: Double) -> [String: Any] {
+        queue.sync {
+            let response = engine.setReverbAmount(amount)
+            emit("playbackStateChanged", engine.playbackState(queue: queueManager.dictionary))
+            return response
+        }
+    }
+
+    func setConcertHallEnabled(_ enabled: Bool) -> [String: Any] {
+        queue.sync {
+            let response = engine.setConcertHallEnabled(enabled)
+            emit("playbackStateChanged", engine.playbackState(queue: queueManager.dictionary))
+            return response
+        }
+    }
+
+    func setConcertHallAmount(_ amount: Double) -> [String: Any] {
+        queue.sync {
+            let response = engine.setConcertHallAmount(amount)
+            emit("playbackStateChanged", engine.playbackState(queue: queueManager.dictionary))
+            return response
+        }
+    }
+
     func notImplementedResponse(_ method: String) -> [String: Any] {
         ["status": NativeAudioStubStatus.notImplemented.rawValue, "method": method]
     }
@@ -153,6 +248,9 @@ final class NativePlaybackController {
             emit("playbackStateChanged", state)
             startProgressTimerIfNeeded()
             return state
+        } catch let error as NativeAudioEngine.EngineError {
+            stopProgressTimer()
+            return playbackErrorResponse(code: error.errorCode, message: error.localizedDescription, trackId: requestedTrackId)
         } catch {
             stopProgressTimer()
             return playbackErrorResponse(code: "play_failed", message: error.localizedDescription, trackId: requestedTrackId)

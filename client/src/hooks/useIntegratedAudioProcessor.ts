@@ -6,5 +6,5 @@
  */
 export { useIosNativeAudioProcessor as useIntegratedAudioProcessor } from './useIosNativeAudioProcessor';
 export type { StreamingParams, EqBand as EqualizerBand, SpatialEffectsConfig } from './useIosNativeAudioProcessor';
-export const EQ_GAIN_MIN = -12;
-export const EQ_GAIN_MAX = 12;
+export const EQ_GAIN_MIN = -8;
+export const EQ_GAIN_MAX = 8;

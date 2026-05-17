@@ -89,6 +89,9 @@
   --sidebar-border: var(--ep-border);
   --sidebar-ring: rgba(255, 16, 42, 0.32);
   --radius: 1rem;
+  --ep-nav-height: 5.75rem;
+  --ep-mini-player-height: 4.75rem;
+  --ep-safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .dark {
@@ -179,7 +182,26 @@
   }
 
   .bottom-nav-safe {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+    min-height: calc(var(--ep-nav-height) + var(--ep-safe-bottom));
+    padding-bottom: calc(var(--ep-safe-bottom) + 0.75rem);
+  }
+
+  .mini-player-fixed {
+    position: fixed;
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: calc(var(--ep-safe-bottom) + var(--ep-nav-height) + 0.5rem);
+    z-index: 40;
+    min-height: var(--ep-mini-player-height);
+  }
+
+  .home-scroll-with-player {
+    padding-bottom: calc(var(--ep-safe-bottom) + var(--ep-nav-height) + var(--ep-mini-player-height) + 1.5rem);
+  }
+
+  .home-bottom-spacer {
+    height: calc(var(--ep-safe-bottom) + var(--ep-nav-height) + var(--ep-mini-player-height) + 1rem);
+    flex: none;
   }
 
   /* Premium card effect */

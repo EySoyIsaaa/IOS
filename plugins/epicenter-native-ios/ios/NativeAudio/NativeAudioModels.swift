@@ -17,6 +17,8 @@ struct NativeTrack {
     let durationMs: Int64
     let fileName: String
     let fileExtension: String
+    let codec: String?
+    let qualityClass: String?
     let sourceUri: String
     let bookmarkData: Data?
     let localFilePath: String?
@@ -43,6 +45,8 @@ struct NativeTrack {
             "durationMs": durationMs,
             "fileName": fileName,
             "fileExtension": fileExtension,
+            "codec": jsonOrNull(codec),
+            "qualityClass": jsonOrNull(qualityClass),
             "sourceUri": sourceUri,
             "bookmarkData": jsonOrNull(bookmarkData?.base64EncodedString()),
             "localFilePath": jsonOrNull(localFilePath),

@@ -11,6 +11,8 @@ export interface IOSNativeTrack {
   durationMs: number;
   fileName: string;
   fileExtension: string;
+  codec?: string | null;
+  qualityClass?: string | null;
   sourceUri: string;
   bookmarkData?: string | null;
   localFilePath?: string | null;
@@ -78,6 +80,26 @@ export interface IOSNativePlaybackState {
   code?: string;
   message?: string;
   epicenter?: IOSNativeEpicenterState;
+  eq?: IOSNativeEqState;
+  fx?: IOSNativeFxState;
+}
+
+export interface IOSNativeEqState {
+  enabled: boolean;
+  bands: number[];
+  frequencies: number[];
+  headroomDb: number;
+}
+
+export interface IOSNativeFxState {
+  reverbEnabled: boolean;
+  reverbAmount: number;
+  reverbWetDryMix?: number;
+  concertHallEnabled: boolean;
+  concertHallAmount: number;
+  concertHallWetDryMix?: number;
+  combinedMode?: string;
+  outputVolume?: number;
 }
 
 export interface IOSNativeEpicenterState {
@@ -129,8 +151,15 @@ export interface EpicenterNativePlugin {
   previous(): Promise<IOSNativePlaybackState>;
   setEpicenterEnabled(params: { enabled: boolean }): Promise<Record<string, unknown>>;
   setEpicenterParams(params: Partial<Omit<IOSNativeEpicenterState, 'enabled'>> & { output?: number; sweep?: number }): Promise<Record<string, unknown>>;
+  setEqEnabled(params: { enabled: boolean }): Promise<Record<string, unknown>>;
+  setEqBand(params: { index: number; gain: number }): Promise<Record<string, unknown>>;
   setEqBands(params: { gains: number[] }): Promise<Record<string, unknown>>;
+  setEqPreset(params: { name?: string; gains: number[] }): Promise<Record<string, unknown>>;
+  resetEq(): Promise<Record<string, unknown>>;
   setReverbEnabled(params: { enabled: boolean }): Promise<Record<string, unknown>>;
+  setReverbAmount(params: { amount: number }): Promise<Record<string, unknown>>;
+  setConcertHallEnabled(params: { enabled: boolean }): Promise<Record<string, unknown>>;
+  setConcertHallAmount(params: { amount: number }): Promise<Record<string, unknown>>;
   addListener(
     eventName: 'playbackStateChanged',
     listenerFunc: (event: IOSNativePlaybackStateChangedEvent) => void,

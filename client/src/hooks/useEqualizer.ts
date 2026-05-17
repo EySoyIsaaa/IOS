@@ -72,7 +72,7 @@ export function useEqualizer(audioContext: AudioContext | null): EqualizerContro
   }, [audioContext]);
 
   const setBandGain = useCallback((index: number, gain: number) => {
-    const clampedGain = Math.max(-12, Math.min(12, gain));
+    const clampedGain = Math.max(-8, Math.min(8, gain));
     
     setBands((prev) => {
       const newBands = [...prev];
