@@ -102,6 +102,27 @@ const clampDspParams = (params: StreamingParams): StreamingParams => ({
 const MAX_SAFE_DSP_BIT_DEPTH = 24;
 const MAX_SAFE_DSP_SAMPLE_RATE = 192000;
 
+const safeTitle = (track?: Partial<Track> | null): string =>
+  typeof track?.title === "string" && track.title.trim()
+    ? track.title
+    : "Canción desconocida";
+
+const safeArtist = (track?: Partial<Track> | null): string =>
+  typeof track?.artist === "string" && track.artist.trim()
+    ? track.artist
+    : "Artista desconocido";
+
+const normalizeLibraryTrack = (
+  track: Track | null | undefined,
+): Track | null => {
+  if (!track || !track.id) return null;
+  return {
+    ...track,
+    title: safeTitle(track),
+    artist: safeArtist(track),
+  };
+};
+
 const getAudioCompatibilityUnsupportedReason = (
   track: Track,
 ): string | null => {
@@ -170,7 +191,19 @@ export default function Home() {
   const crossfade = useCrossfade();
   const { t, language, setLanguage } = useLanguage();
   const { theme, toggleTheme, switchable } = useTheme();
-  const playlistManager = usePlaylists(queue.library);
+  const safeLibrary = useMemo(() => {
+    if (!Array.isArray(queue.library)) return [];
+    return queue.library
+      .map((track) => normalizeLibraryTrack(track))
+      .filter((track): track is Track => {
+        if (!track?.id) {
+          console.warn("[SongsScreen] invalid track skipped", { track });
+          return false;
+        }
+        return true;
+      });
+  }, [queue.library]);
+  const playlistManager = usePlaylists(safeLibrary);
 
   const [activeTab, setActiveTab] = useState<TabType>("player");
   const [libraryView, setLibraryView] = useState<LibraryView>("main");
@@ -238,42 +271,59 @@ export default function Home() {
   const lastPositionSyncRef = useRef(0);
 
   const hiResTracks = useMemo(
-    () => queue.library.filter((track) => track.isHiRes),
-    [queue.library],
+    () => safeLibrary.filter((track) => track.isHiRes),
+    [safeLibrary],
   );
 
   const sortedSongs = useMemo(() => {
-    if (songSort === "default") return queue.library;
-    const copy = [...queue.library];
-    if (songSort === "name") {
+    console.info("[SongsScreen] render state", {
+      libraryCount: safeLibrary.length,
+      songSort,
+    });
+    try {
+      if (songSort === "default") return safeLibrary;
+      const copy = [...safeLibrary];
+      if (songSort === "name") {
+        copy.sort((a, b) =>
+          safeTitle(a).localeCompare(
+            safeTitle(b),
+            language === "es" ? "es" : "en",
+            {
+              sensitivity: "base",
+            },
+          ),
+        );
+        return copy;
+      }
       copy.sort((a, b) =>
-        a.title.localeCompare(b.title, language === "es" ? "es" : "en", {
-          sensitivity: "base",
-        }),
+        safeArtist(a).localeCompare(
+          safeArtist(b),
+          language === "es" ? "es" : "en",
+          {
+            sensitivity: "base",
+          },
+        ),
       );
       return copy;
+    } catch (error) {
+      console.error("[SongsScreen] sort failed", error);
+      return safeLibrary;
     }
-    copy.sort((a, b) =>
-      a.artist.localeCompare(b.artist, language === "es" ? "es" : "en", {
-        sensitivity: "base",
-      }),
-    );
-    return copy;
-  }, [queue.library, songSort, language]);
+  }, [safeLibrary, songSort, language]);
 
   useEffect(() => {
     setVisibleSongsCount(250);
-  }, [songSort, queue.library.length]);
+  }, [songSort, safeLibrary.length]);
   const normalizedGlobalQuery = globalSearchQuery.trim().toLowerCase();
 
   const globalResults = useMemo(() => {
     if (!normalizedGlobalQuery) return [];
-    return queue.library.filter((track) =>
-      `${track.title} ${track.artist}`
+    return safeLibrary.filter((track) =>
+      `${safeTitle(track)} ${safeArtist(track)}`
         .toLowerCase()
         .includes(normalizedGlobalQuery),
     );
-  }, [queue.library, normalizedGlobalQuery]);
+  }, [safeLibrary, normalizedGlobalQuery]);
 
   useEffect(() => {
     try {
@@ -327,7 +377,10 @@ export default function Home() {
       );
       if (
         updated &&
-        updated.trackIds.length !== selectedPlaylist.trackIds.length
+        (Array.isArray(updated.trackIds) ? updated.trackIds.length : 0) !==
+          (Array.isArray(selectedPlaylist.trackIds)
+            ? selectedPlaylist.trackIds.length
+            : 0)
       ) {
         setSelectedPlaylist(updated);
       }
@@ -376,9 +429,14 @@ export default function Home() {
       );
       playbackReasonRef.current =
         source === "unsupported-skip" ? "unsupported-skip" : "next";
-      queue.nextTrack();
+      void audioProcessor.next();
     },
-    [queue],
+    [
+      audioProcessor,
+      queue.currentTrack?.id,
+      queue.currentTrackIndex,
+      queue.queue.length,
+    ],
   );
 
   const handlePreviousTrack = useCallback(
@@ -395,9 +453,14 @@ export default function Home() {
         },
       );
       playbackReasonRef.current = "previous";
-      queue.previousTrack();
+      void audioProcessor.previous();
     },
-    [queue],
+    [
+      audioProcessor,
+      queue.currentTrack?.id,
+      queue.currentTrackIndex,
+      queue.queue.length,
+    ],
   );
 
   // Configurar handlers de Media Session y Notificaciones Nativas
@@ -405,8 +468,16 @@ export default function Home() {
     mediaSession.setHandlers({
       onPlay: () => audioProcessor.play(),
       onPause: () => audioProcessor.pause(),
-      onNextTrack: () => handleNextTrack("media-session"),
-      onPreviousTrack: () => handlePreviousTrack("media-session"),
+      onNextTrack: () => {
+        console.info(
+          "[MediaSession] ignored nexttrack on iOS Capacitor; native MPRemoteCommandCenter owns it",
+        );
+      },
+      onPreviousTrack: () => {
+        console.info(
+          "[MediaSession] ignored previoustrack on iOS Capacitor; native MPRemoteCommandCenter owns it",
+        );
+      },
       onSeekTo: (time) => audioProcessor.seek(time),
       onSeekBackward: (offset) => {
         audioProcessor.seek(Math.max(0, audioProcessor.currentTime - offset));
@@ -519,7 +590,7 @@ export default function Home() {
 
     const queuedTrack =
       queue.queue.find((track) => track.id === nativeTrack.id) ??
-      queue.library.find((track) => track.id === nativeTrack.id);
+      safeLibrary.find((track) => track.id === nativeTrack.id);
 
     console.info("[Playback] loaded track", {
       trackId: nativeTrack.id,
@@ -535,7 +606,7 @@ export default function Home() {
   }, [
     audioProcessor.currentTrack,
     audioProcessor.currentTrackId,
-    queue.library,
+    safeLibrary,
     queue.queue,
     queue.syncCurrentTrackById,
   ]);
@@ -633,24 +704,21 @@ export default function Home() {
         }
 
         playbackReasonRef.current = "failure-skip";
-        queue.playTrack(candidateIndex);
+        void audioProcessor.next();
         return true;
       }
 
       return false;
     },
-    [queue.currentTrackIndex, queue.playTrack, queue.queue],
+    [audioProcessor, queue.currentTrackIndex, queue.queue],
   );
 
   // Configurar callbacks cuando termina o falla una canción.
   useEffect(() => {
     audioProcessor.setOnTrackEnded(() => {
-      if (
-        queue.queue.length > 0 &&
-        queue.currentTrackIndex < queue.queue.length - 1
-      ) {
-        handleNextTrack("autoplay");
-      }
+      console.info(
+        "[Playback] native track ended; NativePlaybackController owns auto-next",
+      );
     });
 
     audioProcessor.setOnTrackError((error) => {
@@ -683,7 +751,6 @@ export default function Home() {
   }, [
     audioProcessor,
     clearPendingPlaybackTimers,
-    handleNextTrack,
     playNextAvailableTrackAfterFailure,
     queue,
     t,
@@ -840,7 +907,7 @@ export default function Home() {
   // Agrupar canciones
   const songsByArtist = useMemo(
     () =>
-      (Array.isArray(queue.library) ? queue.library : []).reduce(
+      safeLibrary.reduce(
         (acc, track) => {
           if (!track?.id) {
             console.warn(
@@ -856,12 +923,12 @@ export default function Home() {
         },
         {} as Record<string, Track[]>,
       ),
-    [queue.library, t],
+    [safeLibrary, t],
   );
 
   const albums = useMemo(
     () =>
-      (Array.isArray(queue.library) ? queue.library : []).reduce(
+      safeLibrary.reduce(
         (acc, track) => {
           if (!track?.id) {
             console.warn("[ActionsScreen] skipping invalid album track", track);
@@ -875,7 +942,7 @@ export default function Home() {
         },
         {} as Record<string, Track[]>,
       ),
-    [queue.library, t],
+    [safeLibrary, t],
   );
 
   // Handlers
@@ -1019,7 +1086,12 @@ export default function Home() {
     if (!selectedPlaylist) return;
 
     // Check if already in playlist
-    if (selectedPlaylist.trackIds.includes(track.id)) {
+    if (!track?.id) return;
+
+    const selectedTrackIds = Array.isArray(selectedPlaylist.trackIds)
+      ? selectedPlaylist.trackIds
+      : [];
+    if (selectedTrackIds.includes(track.id)) {
       toast.error(t("duplicates.alreadyInPlaylist"));
       return;
     }
@@ -1366,7 +1438,7 @@ export default function Home() {
         <AddSongsToPlaylistModal
           isOpen={showAddSongsToPlaylist}
           selectedPlaylist={selectedPlaylist}
-          library={queue.library}
+          library={safeLibrary}
           t={t}
           onClose={() => setShowAddSongsToPlaylist(false)}
           onAddTrack={handleAddSongToSelectedPlaylist}
@@ -1418,7 +1490,7 @@ export default function Home() {
           t={t}
           libraryView={libraryView}
           setLibraryView={setLibraryView}
-          queueLibrary={queue.library}
+          queueLibrary={safeLibrary}
           queueIsLoading={queue.isLoading}
           importIsImporting={queue.importProgress.isImporting}
           playlists={playlistManager.playlists}

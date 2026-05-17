@@ -20,6 +20,16 @@ struct NativeTrack {
     let codec: String?
     let qualityClass: String?
     let sourceUri: String
+    let originalUrl: String?
+    let playbackUrl: String?
+    let optimizedUrl: String?
+    let optimizedForPlayback: Bool
+    let optimizationStatus: String
+    let optimizationError: String?
+    let originalBitDepth: Int?
+    let originalSampleRate: Int?
+    let originalBitrate: Int?
+    let originalFormat: String?
     let bookmarkData: Data?
     let localFilePath: String?
     let sourceType: String
@@ -48,6 +58,17 @@ struct NativeTrack {
             "codec": jsonOrNull(codec),
             "qualityClass": jsonOrNull(qualityClass),
             "sourceUri": sourceUri,
+            "sourceUrl": jsonOrNull(originalUrl ?? sourceUri),
+            "originalUrl": jsonOrNull(originalUrl ?? sourceUri),
+            "playbackUrl": jsonOrNull(playbackUrl),
+            "optimizedUrl": jsonOrNull(optimizedUrl),
+            "optimizedForPlayback": optimizedForPlayback,
+            "optimizationStatus": optimizationStatus,
+            "optimizationError": jsonOrNull(optimizationError),
+            "originalBitDepth": jsonOrNull(originalBitDepth ?? bitDepth),
+            "originalSampleRate": jsonOrNull(originalSampleRate ?? sampleRate),
+            "originalBitrate": jsonOrNull(originalBitrate ?? bitrate),
+            "originalFormat": jsonOrNull(originalFormat ?? fileExtension),
             "bookmarkData": jsonOrNull(bookmarkData?.base64EncodedString()),
             "localFilePath": jsonOrNull(localFilePath),
             "sourceType": sourceType,
