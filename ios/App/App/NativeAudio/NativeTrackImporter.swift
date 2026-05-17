@@ -225,7 +225,10 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
                 throw NSError(domain: "ImportOptimizer", code: 3, userInfo: [NSLocalizedDescriptionKey: "Unable to allocate converter input buffer"])
             }
             try inputFile.read(into: inputBuffer)
-            if inputBuffer.frameLength == 0 { break }
+            if inputBuffer.frameLength == 0 {
+                try drainConverter(converter, outputFormat: outputFormat, outputFile: outputFile, frameCapacity: inputCapacity)
+                break
+            }
 
             var didProvideInput = false
             while true {
@@ -252,6 +255,41 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
                     }
                     break
                 }
+            }
+        }
+    }
+
+
+    private func drainConverter(
+        _ converter: AVAudioConverter,
+        outputFormat: AVAudioFormat,
+        outputFile: AVAudioFile,
+        frameCapacity: AVAudioFrameCount
+    ) throws {
+        var didSendEndOfStream = false
+        while true {
+            guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: frameCapacity) else {
+                throw NSError(domain: "ImportOptimizer", code: 6, userInfo: [NSLocalizedDescriptionKey: "Unable to allocate converter drain buffer"])
+            }
+            var conversionError: NSError?
+            let status = converter.convert(to: outputBuffer, error: &conversionError) { _, outStatus in
+                if didSendEndOfStream {
+                    outStatus.pointee = .noDataNow
+                    return nil
+                }
+                didSendEndOfStream = true
+                outStatus.pointee = .endOfStream
+                return nil
+            }
+            if let conversionError = conversionError { throw conversionError }
+            if outputBuffer.frameLength > 0 {
+                try outputFile.write(from: outputBuffer)
+            }
+            if status == .endOfStream || status == .inputRanDry {
+                break
+            }
+            if status == .error {
+                throw NSError(domain: "ImportOptimizer", code: 7, userInfo: [NSLocalizedDescriptionKey: "Audio conversion drain failed"])
             }
         }
     }
