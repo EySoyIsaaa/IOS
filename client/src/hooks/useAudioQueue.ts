@@ -21,7 +21,6 @@ export interface Track extends IOSAppTrack {
   fileName?: string;
   fileType?: string;
   codec?: string;
-  qualityClass?: string;
   fileSize?: number;
   title: string;
   artist: string;
@@ -31,8 +30,19 @@ export interface Track extends IOSAppTrack {
   sampleRate?: number;
   bitrate?: number;
   isHiRes?: boolean;
-  qualityClass?: IOSAppTrack['qualityClass'];
+  qualityClass?: IOSAppTrack["qualityClass"];
   sourceUri?: string;
+  sourceUrl?: string;
+  originalUrl?: string;
+  playbackUrl?: string;
+  optimizedUrl?: string;
+  optimizedForPlayback?: boolean;
+  optimizationStatus?: IOSAppTrack["optimizationStatus"];
+  optimizationError?: string;
+  originalBitDepth?: number;
+  originalSampleRate?: number;
+  originalBitrate?: number;
+  originalFormat?: string;
   sourceType?: "manual-ios";
   albumId?: number;
   albumArtUri?: string;
@@ -103,11 +113,17 @@ const DEFAULT_PAGE_SIZE = 1000;
 
 const nativeTrackToTrack = nativeTrackToAppTrack;
 
+const isValidTrack = (track: Track | null | undefined): track is Track =>
+  Boolean(track?.id);
+
 const setNativeQueue = async (tracks: Track[], startIndex: number) => {
-  if (tracks.length === 0) return;
+  const playableTracks = Array.isArray(tracks)
+    ? tracks.filter(isValidTrack)
+    : [];
+  if (playableTracks.length === 0) return;
   await EpicenterNative.setQueue({
-    trackIds: tracks.map((track) => track.id),
-    startIndex: Math.max(0, Math.min(startIndex, tracks.length - 1)),
+    trackIds: playableTracks.map((track) => track.id),
+    startIndex: Math.max(0, Math.min(startIndex, playableTracks.length - 1)),
   });
 };
 
@@ -132,7 +148,8 @@ export function useAudioQueue(): QueueController {
         limit: DEFAULT_PAGE_SIZE,
         sort: "addedAt",
       });
-      const tracks = page.tracks.map(nativeTrackToTrack);
+      const nativeTracks = Array.isArray(page.tracks) ? page.tracks : [];
+      const tracks = nativeTracks.map(nativeTrackToTrack).filter(isValidTrack);
       setLibrary(tracks);
       console.info("[iOS Native Library] loaded count", tracks.length);
       return tracks;
@@ -162,10 +179,13 @@ export function useAudioQueue(): QueueController {
         const result = await EpicenterNative.importTracks();
         console.info(
           "[iOS Native Library] imported count",
-          result.tracks.length,
+          Array.isArray(result.tracks) ? result.tracks.length : 0,
         );
         await refreshLibrary();
-        return { added: result.tracks.length, duplicates: [] };
+        return {
+          added: Array.isArray(result.tracks) ? result.tracks.length : 0,
+          duplicates: [],
+        };
       } catch (error) {
         console.error("[iOS Native Library] import error", error);
         throw error;
@@ -196,6 +216,7 @@ export function useAudioQueue(): QueueController {
 
   const addToQueue = useCallback(
     (track: Track) => {
+      if (!isValidTrack(track)) return;
       setQueue((prev) => {
         const next = [...prev, track];
         void setNativeQueue(
@@ -210,6 +231,7 @@ export function useAudioQueue(): QueueController {
 
   const addToQueueNext = useCallback(
     (track: Track) => {
+      if (!isValidTrack(track)) return;
       setQueue((prev) => {
         const insertIndex = currentTrackIndex >= 0 ? currentTrackIndex + 1 : 0;
         const next = [
@@ -229,8 +251,12 @@ export function useAudioQueue(): QueueController {
 
   const addMultipleToQueue = useCallback(
     (tracks: Track[]) => {
+      const validTracks = Array.isArray(tracks)
+        ? tracks.filter(isValidTrack)
+        : [];
+      if (validTracks.length === 0) return;
       setQueue((prev) => {
-        const next = [...prev, ...tracks];
+        const next = [...prev.filter(isValidTrack), ...validTracks];
         void setNativeQueue(
           next,
           currentTrackIndex >= 0 ? currentTrackIndex : 0,
@@ -277,6 +303,7 @@ export function useAudioQueue(): QueueController {
   );
 
   const playNow = useCallback((track: Track) => {
+    if (!isValidTrack(track)) return;
     const next = [track];
     setQueue(next);
     setCurrentTrackIndex(0);
@@ -284,13 +311,19 @@ export function useAudioQueue(): QueueController {
   }, []);
 
   const playAllInOrder = useCallback((tracks: Track[]) => {
-    setQueue(tracks);
-    setCurrentTrackIndex(tracks.length > 0 ? 0 : -1);
-    void setNativeQueue(tracks, 0);
+    const validTracks = Array.isArray(tracks)
+      ? tracks.filter(isValidTrack)
+      : [];
+    setQueue(validTracks);
+    setCurrentTrackIndex(validTracks.length > 0 ? 0 : -1);
+    void setNativeQueue(validTracks, 0);
   }, []);
 
   const shuffleAll = useCallback((tracks: Track[], firstTrackId?: string) => {
-    const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+    const validTracks = Array.isArray(tracks)
+      ? tracks.filter(isValidTrack)
+      : [];
+    const shuffled = [...validTracks].sort(() => Math.random() - 0.5);
     if (firstTrackId) {
       const firstIndex = shuffled.findIndex(
         (track) => track.id === firstTrackId,
@@ -415,7 +448,9 @@ export function useAudioQueue(): QueueController {
     queue,
     currentTrackIndex,
     currentTrack:
-      currentTrackIndex >= 0 ? (queue[currentTrackIndex] ?? null) : null,
+      currentTrackIndex >= 0
+        ? (queue.filter(isValidTrack)[currentTrackIndex] ?? null)
+        : null,
     refreshLibrary,
     addToLibrary,
     importManualTracksFromNativePicker,

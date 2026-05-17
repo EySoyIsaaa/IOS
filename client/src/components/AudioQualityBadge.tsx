@@ -2,7 +2,11 @@
  * EpicenterDSP 7.0 - hardware-style audio quality badges.
  */
 
-import { formatQualityLabel, isHiResQuality, qualityTier } from "@shared/audioQuality";
+import {
+  formatQualityLabel,
+  isHiResQuality,
+  qualityTier,
+} from "@shared/audioQuality";
 
 interface AudioQualityBadgeProps {
   bitDepth?: number;
@@ -25,7 +29,12 @@ export function AudioQualityBadge({
   compact = false,
   hiResLogoUrl,
 }: AudioQualityBadgeProps) {
-  const detectedHiRes = isHiResQuality(bitDepth, sampleRate, codec, fileExtension);
+  const detectedHiRes = isHiResQuality(
+    bitDepth,
+    sampleRate,
+    codec,
+    fileExtension,
+  );
   const isHighRes = typeof isHiRes === "boolean" ? isHiRes : detectedHiRes;
   const tier = qualityTier(bitDepth, sampleRate, bitrate, codec, fileExtension);
   const parts = [formatQualityLabel(bitDepth, sampleRate)].filter(Boolean);
@@ -48,7 +57,7 @@ export function AudioQualityBadge({
         }`}
         data-testid="quality-badge-compact"
       >
-        {`${qualityClassLabel(qualityClass)}${parts.length ? ` • ${parts.join(" • ").replace("-bit ", "b/").replace("kHz", "k")}` : ""}`}
+        {`${tier.toUpperCase()}${parts.length ? ` • ${parts.join(" • ").replace("-bit ", "b/").replace("kHz", "k")}` : ""}`}
       </span>
     );
   }
@@ -60,14 +69,31 @@ export function AudioQualityBadge({
   ].filter(Boolean);
 
   return (
-    <div className="flex flex-wrap justify-center gap-2" data-testid="quality-badge">
+    <div
+      className="flex flex-wrap justify-center gap-2"
+      data-testid="quality-badge"
+    >
       {isHighRes && hiResLogoUrl ? (
         <span className="quality-chip inline-flex items-center rounded-md px-2.5 py-1">
-          <img src={hiResLogoUrl} alt="Hi-Res Audio" className="h-4 w-auto object-contain" />
+          <img
+            src={hiResLogoUrl}
+            alt="Hi-Res Audio"
+            className="h-4 w-auto object-contain"
+          />
         </span>
       ) : (
         <span className="quality-chip rounded-md px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em]">
-          {tier === "studio" ? "STUDIO" : isHighRes ? "HI-RES" : tier === "cd" ? "CD QUALITY" : tier === "lossless" ? "LOSSLESS" : tier === "lossy" ? "COMPRESSED" : "STANDARD"}
+          {tier === "studio"
+            ? "STUDIO"
+            : isHighRes
+              ? "HI-RES"
+              : tier === "cd"
+                ? "CD QUALITY"
+                : tier === "lossless"
+                  ? "LOSSLESS"
+                  : tier === "lossy"
+                    ? "COMPRESSED"
+                    : "STANDARD"}
         </span>
       )}
       {chips.map((chip) => (

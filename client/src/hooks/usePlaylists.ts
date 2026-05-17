@@ -54,7 +54,9 @@ export function usePlaylists(library: Track[]): PlaylistController {
   const resolveTracks = useCallback(
     (trackIds: string[] = []): Track[] => {
       const safeTrackIds = Array.isArray(trackIds) ? trackIds : [];
-      const safeLibrary = Array.isArray(library) ? library : [];
+      const safeLibrary = Array.isArray(library)
+        ? library.filter((track): track is Track => Boolean(track?.id))
+        : [];
       const libraryMap = new Map(safeLibrary.map((t) => [t.id, t]));
       return safeTrackIds
         .map((id) => libraryMap.get(id))
