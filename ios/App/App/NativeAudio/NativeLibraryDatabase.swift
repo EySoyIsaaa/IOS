@@ -255,6 +255,20 @@ final class NativeLibraryDatabase {
                 }
             }
         }
+        let backfillStatements = [
+            "UPDATE tracks SET original_url = source_uri WHERE original_url IS NULL OR original_url = ''",
+            "UPDATE tracks SET playback_url = local_file_path WHERE playback_url IS NULL OR playback_url = ''",
+            "UPDATE tracks SET optimization_status = 'ready' WHERE optimization_status IS NULL OR optimization_status = ''",
+            "UPDATE tracks SET original_bit_depth = bit_depth WHERE original_bit_depth IS NULL AND bit_depth IS NOT NULL",
+            "UPDATE tracks SET original_sample_rate = sample_rate WHERE original_sample_rate IS NULL AND sample_rate IS NOT NULL",
+            "UPDATE tracks SET original_bitrate = bitrate WHERE original_bitrate IS NULL AND bitrate IS NOT NULL",
+            "UPDATE tracks SET original_format = file_extension WHERE original_format IS NULL OR original_format = ''",
+        ]
+        for statement in backfillStatements {
+            if sqlite3_exec(db, statement, nil, nil, nil) != SQLITE_OK {
+                throw DatabaseError.stepFailed(lastErrorMessage())
+            }
+        }
     }
 
     private func prepare(_ sql: String) throws -> OpaquePointer? {

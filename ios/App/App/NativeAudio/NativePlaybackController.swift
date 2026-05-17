@@ -40,6 +40,7 @@ final class NativePlaybackController {
         queue.sync {
             print("[NativeQueue] setQueue count=\(trackIds.count) startIndex=\(startIndex)")
             queueManager.setQueue(trackIds: trackIds, startIndex: startIndex)
+            temporarilyFailedTrackIds.removeAll()
             print("[NativeQueue] currentIndex=\(self.queueManager.currentIndex) currentTrackId=\(self.queueManager.currentTrackId ?? "nil")")
             let response: [String: Any] = [
                 "status": "ok",
@@ -313,7 +314,7 @@ final class NativePlaybackController {
             return errorResponse
         }
         print("[NativePlaybackController] skipping failed track id=\(trackId) next=\(nextTrackId) code=\(code)")
-        let state = playCurrentTrack(requestedTrackId: nextTrackId, shouldRestartLoadedTrack: true, skipOnFailure: false)
+        let state = playCurrentTrack(requestedTrackId: nextTrackId, shouldRestartLoadedTrack: true, skipOnFailure: true)
         if isSuccessfulPlaybackResponse(state) {
             var skipped = state
             skipped["skippedFailedTrackId"] = trackId

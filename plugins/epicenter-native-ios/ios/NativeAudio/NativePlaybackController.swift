@@ -11,6 +11,7 @@ final class NativePlaybackController {
     private var progressTimer: Timer?
     private var wasPlayingBeforeInterruption = false
     private var temporarilyFailedTrackIds = Set<String>()
+    private var nativeRequestCounter = 0
 
     var eventEmitter: ((String, [String: Any]) -> Void)?
 
@@ -37,8 +38,10 @@ final class NativePlaybackController {
 
     func setQueue(trackIds: [String], startIndex: Int) -> [String: Any] {
         queue.sync {
+            print("[NativeQueue] setQueue count=\(trackIds.count) startIndex=\(startIndex)")
             queueManager.setQueue(trackIds: trackIds, startIndex: startIndex)
             temporarilyFailedTrackIds.removeAll()
+            print("[NativeQueue] currentIndex=\(self.queueManager.currentIndex) currentTrackId=\(self.queueManager.currentTrackId ?? "nil")")
             let response: [String: Any] = [
                 "status": "ok",
                 "queue": queueManager.dictionary,
@@ -99,18 +102,41 @@ final class NativePlaybackController {
         }
     }
 
-    func next() -> [String: Any] {
+    func next(source: String = "bridge") -> [String: Any] {
         queue.sync {
+            let requestId = nextRequestId()
+            print("[NativeQueue] next requested source=\(source) requestId=\(requestId)")
+            guard !queueManager.trackIds.isEmpty else {
+                print("[NativeQueue] abort queue empty")
+                return playbackErrorResponse(code: "empty_queue", message: "No track is queued")
+            }
+            guard queueManager.currentIndex >= 0, queueManager.currentIndex < queueManager.trackIds.count else {
+                print("[NativeQueue] abort index out of range currentIndex=\(queueManager.currentIndex) count=\(queueManager.trackIds.count)")
+                return playbackErrorResponse(code: "queue_index_out_of_range", message: "Queue index is out of range")
+            }
             guard let nextTrackId = queueManager.moveNext() else {
+                print("[NativeQueue] abort index out of range nextIndex=\(queueManager.currentIndex + 1) count=\(queueManager.trackIds.count)")
                 return playbackErrorResponse(code: "queue_end", message: "No next track is available")
             }
+            print("[NativeQueue] currentIndex=\(self.queueManager.currentIndex) currentTrackId=\(nextTrackId)")
             return playCurrentTrack(requestedTrackId: nextTrackId, shouldRestartLoadedTrack: true)
         }
     }
 
-    func previous() -> [String: Any] {
+    func previous(source: String = "bridge") -> [String: Any] {
         queue.sync {
+            let requestId = nextRequestId()
+            print("[NativeQueue] previous requested source=\(source) requestId=\(requestId)")
+            guard !queueManager.trackIds.isEmpty else {
+                print("[NativeQueue] abort queue empty")
+                return playbackErrorResponse(code: "empty_queue", message: "No track is queued")
+            }
+            guard queueManager.currentIndex >= 0, queueManager.currentIndex < queueManager.trackIds.count else {
+                print("[NativeQueue] abort index out of range currentIndex=\(queueManager.currentIndex) count=\(queueManager.trackIds.count)")
+                return playbackErrorResponse(code: "queue_index_out_of_range", message: "Queue index is out of range")
+            }
             guard let previousTrackId = queueManager.movePrevious() else {
+                print("[NativeQueue] abort index out of range previousIndex=\(queueManager.currentIndex - 1) count=\(queueManager.trackIds.count)")
                 do {
                     try engine.seek(to: 0)
                     let state = engine.playbackState(queue: queueManager.dictionary)
@@ -121,6 +147,7 @@ final class NativePlaybackController {
                     return playbackErrorResponse(code: "queue_start", message: "No previous track is available")
                 }
             }
+            print("[NativeQueue] currentIndex=\(self.queueManager.currentIndex) currentTrackId=\(previousTrackId)")
             return playCurrentTrack(requestedTrackId: previousTrackId, shouldRestartLoadedTrack: true)
         }
     }
@@ -230,9 +257,18 @@ final class NativePlaybackController {
         ["status": NativeAudioStubStatus.notImplemented.rawValue, "method": method]
     }
 
-    private func playCurrentTrack(requestedTrackId: String, shouldRestartLoadedTrack: Bool) -> [String: Any] {
+    private func playCurrentTrack(requestedTrackId: String, shouldRestartLoadedTrack: Bool, skipOnFailure: Bool = true) -> [String: Any] {
         guard let track = repository.findTrack(id: requestedTrackId) else {
             return playbackErrorResponse(code: "track_not_found", message: "Track was not found", trackId: requestedTrackId)
+        }
+        print("[NativePlaybackController] load track playbackUrl=\(track.playbackUrl ?? "nil") originalUrl=\(track.originalUrl ?? track.sourceUri)")
+        guard track.optimizationStatus == "ready", let playbackUrl = track.playbackUrl, !playbackUrl.isEmpty else {
+            return handlePlaybackFailure(
+                code: "playback_url_unavailable",
+                message: track.optimizationError ?? "Track playbackUrl is not ready",
+                trackId: requestedTrackId,
+                skipOnFailure: skipOnFailure
+            )
         }
 
         do {
@@ -242,6 +278,7 @@ final class NativePlaybackController {
                 try engine.load(track: track)
                 let loadedState = engine.playbackState(queue: queueManager.dictionary)
                 updateNowPlayingMetadata(for: track, from: loadedState, playbackRate: 0)
+                print("[NativePlaybackController] currentTrackChanged trackId=\(track.id)")
                 emit("currentTrackChanged", ["status": "ok", "track": track.dictionary])
             }
             try engine.play()
@@ -253,26 +290,55 @@ final class NativePlaybackController {
             return state
         } catch let error as NativeAudioEngine.EngineError {
             stopProgressTimer()
-            return controlledPlaybackFailure(code: error.errorCode, message: error.localizedDescription, trackId: requestedTrackId)
+            return handlePlaybackFailure(
+                code: error.errorCode,
+                message: error.localizedDescription,
+                trackId: requestedTrackId,
+                skipOnFailure: skipOnFailure
+            )
         } catch {
             stopProgressTimer()
-            return controlledPlaybackFailure(code: "play_failed", message: error.localizedDescription, trackId: requestedTrackId)
+            return handlePlaybackFailure(
+                code: "play_failed",
+                message: error.localizedDescription,
+                trackId: requestedTrackId,
+                skipOnFailure: skipOnFailure
+            )
         }
     }
 
-    private func controlledPlaybackFailure(code: String, message: String, trackId: String) -> [String: Any] {
+    private func handlePlaybackFailure(code: String, message: String, trackId: String, skipOnFailure: Bool) -> [String: Any] {
         temporarilyFailedTrackIds.insert(trackId)
-        let response = playbackErrorResponse(code: code, message: message, trackId: trackId)
-        print("[NativePlaybackController] track failed temporarily trackId=\(trackId) code=\(code)")
-        while let nextTrackId = queueManager.moveNext() {
-            if temporarilyFailedTrackIds.contains(nextTrackId) {
+        let errorResponse = playbackErrorResponse(code: code, message: message, trackId: trackId)
+        guard skipOnFailure, let nextTrackId = moveToNextPlayableTrack(after: trackId) else {
+            return errorResponse
+        }
+        print("[NativePlaybackController] skipping failed track id=\(trackId) next=\(nextTrackId) code=\(code)")
+        let state = playCurrentTrack(requestedTrackId: nextTrackId, shouldRestartLoadedTrack: true, skipOnFailure: true)
+        if isSuccessfulPlaybackResponse(state) {
+            var skipped = state
+            skipped["skippedFailedTrackId"] = trackId
+            return skipped
+        }
+        return errorResponse
+    }
+
+    private func moveToNextPlayableTrack(after failedTrackId: String) -> String? {
+        let snapshot = queueManager.trackIds
+        guard snapshot.count > 1 else { return nil }
+        let startIndex = max(queueManager.currentIndex, 0)
+        for offset in 1..<snapshot.count {
+            let candidateIndex = (startIndex + offset) % snapshot.count
+            let candidateId = snapshot[candidateIndex]
+            if candidateId == failedTrackId || temporarilyFailedTrackIds.contains(candidateId) {
+                print("[NativeQueue] skipping failed track id=\(candidateId)")
                 continue
             }
-            print("[NativePlaybackController] skipping failed trackId=\(trackId) nextTrackId=\(nextTrackId)")
-            return playCurrentTrack(requestedTrackId: nextTrackId, shouldRestartLoadedTrack: true)
+            queueManager.setCurrentIndex(candidateIndex)
+            return candidateId
         }
         temporarilyFailedTrackIds.removeAll()
-        return response
+        return nil
     }
 
     private func handleTrackFinished(_ track: NativeTrack) {
@@ -280,6 +346,7 @@ final class NativePlaybackController {
             guard let self = self else { return }
             self.emit("progressChanged", self.engine.playbackState(queue: self.queueManager.dictionary))
             if let nextTrackId = self.queueManager.moveNext() {
+                print("[NativeQueue] next requested source=auto-next requestId=auto")
                 _ = self.playCurrentTrack(requestedTrackId: nextTrackId, shouldRestartLoadedTrack: true)
             } else {
                 self.stopProgressTimer()
@@ -352,11 +419,16 @@ final class NativePlaybackController {
                         ? self.isSuccessfulPlaybackResponse(self.pause())
                         : self.isSuccessfulPlaybackResponse(self.play())
                 },
-                next: { [weak self] in self?.isSuccessfulPlaybackResponse(self?.next()) == true },
-                previous: { [weak self] in self?.isSuccessfulPlaybackResponse(self?.previous()) == true },
+                next: { [weak self] in self?.isSuccessfulPlaybackResponse(self?.next(source: "remote")) == true },
+                previous: { [weak self] in self?.isSuccessfulPlaybackResponse(self?.previous(source: "remote")) == true },
                 seek: { [weak self] seconds in self?.isSuccessfulPlaybackResponse(self?.seek(seconds: seconds)) == true }
             )
         )
+    }
+
+    private func nextRequestId() -> Int {
+        nativeRequestCounter += 1
+        return nativeRequestCounter
     }
 
     private func updateNowPlayingMetadata(for track: NativeTrack, from state: [String: Any], playbackRate: Double) {
