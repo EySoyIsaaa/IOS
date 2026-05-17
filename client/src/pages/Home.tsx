@@ -639,7 +639,7 @@ export default function Home() {
           queue.queue.length > 1 &&
           queue.currentTrackIndex < queue.queue.length - 1
         ) {
-          handleNextTrack("unsupported-skip");
+          void audioProcessor.next();
         }
         return;
       }
@@ -675,7 +675,6 @@ export default function Home() {
     [
       audioProcessor,
       clearPendingPlaybackTimers,
-      handleNextTrack,
       queue.currentTrackIndex,
       queue.queue.length,
       t,
@@ -731,15 +730,9 @@ export default function Home() {
       currentTrackRef.current = null;
       console.error("Playback runtime error:", error);
 
-      const movedToNextTrack =
-        playNextAvailableTrackAfterFailure(failedTrackId);
-      if (movedToNextTrack) {
-        toast.error(t("actions.errorLoadingTrackSkipped"));
-      } else {
-        // Evitar "bloqueo" permanente por lista de fallos acumulada.
-        failedQueueTrackIdsRef.current.clear();
-        toast.error(t("actions.errorLoadingTrackNoFallback"));
-      }
+      // NativePlaybackController owns failure-skip decisions. Web only records
+      // the temporary failed track and reflects the controlled error to the UI.
+      toast.error(t("actions.errorLoadingTrackSkipped"));
     });
 
     return () => {
@@ -905,7 +898,7 @@ export default function Home() {
   // Agrupar canciones
   const songsByArtist = useMemo(
     () =>
-      (Array.isArray(queue.library) ? queue.library : []).reduce(
+      safeLibrary.reduce(
         (acc, track) => {
           if (!track?.id) {
             console.warn(
@@ -921,12 +914,12 @@ export default function Home() {
         },
         {} as Record<string, Track[]>,
       ),
-    [queue.library, t],
+    [safeLibrary, t],
   );
 
   const albums = useMemo(
     () =>
-      (Array.isArray(queue.library) ? queue.library : []).reduce(
+      safeLibrary.reduce(
         (acc, track) => {
           if (!track?.id) {
             console.warn("[ActionsScreen] skipping invalid album track", track);
@@ -940,7 +933,7 @@ export default function Home() {
         },
         {} as Record<string, Track[]>,
       ),
-    [queue.library, t],
+    [safeLibrary, t],
   );
 
   // Handlers

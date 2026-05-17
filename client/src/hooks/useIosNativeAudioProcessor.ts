@@ -298,21 +298,29 @@ export function useIosNativeAudioProcessor() {
   );
 
   const play = useCallback(async () => {
+    const requestId = ++nativeTransitionRequestRef.current;
+    setIsNativeTransitionInProgress(true);
     try {
       const state = await EpicenterNative.play(
         currentTrackId ? { trackId: currentTrackId } : undefined,
       );
       applyState(state);
     } catch (error) {
+      if (requestId === nativeTransitionRequestRef.current)
+        setIsNativeTransitionInProgress(false);
       reportError(error);
     }
   }, [applyState, currentTrackId, reportError]);
 
   const pause = useCallback(async () => {
+    const requestId = ++nativeTransitionRequestRef.current;
+    setIsNativeTransitionInProgress(true);
     try {
       const state = await EpicenterNative.pause();
-      applyState(state);
+      if (requestId === nativeTransitionRequestRef.current) applyState(state);
     } catch (error) {
+      if (requestId === nativeTransitionRequestRef.current)
+        setIsNativeTransitionInProgress(false);
       reportError(error);
     }
   }, [applyState, reportError]);
@@ -334,6 +342,21 @@ export function useIosNativeAudioProcessor() {
       const state = await EpicenterNative.stop();
       applyState(state);
     } catch (error) {
+      if (requestId === nativeTransitionRequestRef.current)
+        setIsNativeTransitionInProgress(false);
+      reportError(error);
+    }
+  }, [applyState, reportError]);
+
+  const previous = useCallback(async () => {
+    const requestId = ++nativeTransitionRequestRef.current;
+    setIsNativeTransitionInProgress(true);
+    try {
+      const state = await EpicenterNative.previous();
+      if (requestId === nativeTransitionRequestRef.current) applyState(state);
+    } catch (error) {
+      if (requestId === nativeTransitionRequestRef.current)
+        setIsNativeTransitionInProgress(false);
       reportError(error);
     }
   }, [applyState, reportError]);
