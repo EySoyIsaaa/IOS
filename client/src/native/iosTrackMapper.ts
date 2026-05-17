@@ -83,7 +83,12 @@ const numberOrUndefined = (value?: number | null): number | undefined =>
     ? value
     : undefined;
 
-export const nativeTrackToAppTrack = (track: IOSNativeTrack): IOSAppTrack => {
+export const nativeTrackToAppTrack = (
+  track: Partial<IOSNativeTrack> | null | undefined,
+): IOSAppTrack | null => {
+  if (!track || typeof track !== "object") return null;
+  const id = cleanText(track.id);
+  if (!id) return null;
   const fileName = cleanText(track.fileName);
   const title =
     cleanText(track.title)?.replace(COPIED_FILE_UUID_SUFFIX, "").trim() ||
@@ -99,10 +104,19 @@ export const nativeTrackToAppTrack = (track: IOSNativeTrack): IOSAppTrack => {
   const codec = cleanText(track.codec) || cleanText(track.fileExtension);
   const albumArtUri = cleanText(track.albumArtUri);
   const fileExtension = cleanText(track.fileExtension)?.toLowerCase();
-  const isHiRes = isHiResQuality(bitDepth, sampleRate, fileExtension);
+  const originalUrl = cleanText(
+    track.originalUrl ??
+      track.sourceUrl ??
+      track.sourceUri ??
+      track.localFilePath,
+  );
+  const playbackUrl = cleanText(
+    track.playbackUrl ?? track.localFilePath ?? originalUrl ?? track.sourceUri,
+  );
+  const optimizationStatus = track.optimizationStatus ?? "ready";
 
   return {
-    id: track.id,
+    id,
     sourceTrackId: cleanText(track.stableId),
     fileName,
     fileType: track.fileExtension ? `audio/${track.fileExtension}` : undefined,
@@ -119,14 +133,12 @@ export const nativeTrackToAppTrack = (track: IOSNativeTrack): IOSAppTrack => {
     bitrate,
     isHiRes: isHiResQuality(bitDepth, sampleRate, codec, track.fileExtension),
     sourceUri: cleanText(track.sourceUri),
-    sourceUrl: cleanText(
-      track.sourceUrl ?? track.originalUrl ?? track.sourceUri,
-    ),
-    originalUrl: cleanText(track.originalUrl),
-    playbackUrl: cleanText(track.playbackUrl),
+    sourceUrl: originalUrl,
+    originalUrl,
+    playbackUrl,
     optimizedUrl: cleanText(track.optimizedUrl),
     optimizedForPlayback: !!track.optimizedForPlayback,
-    optimizationStatus: track.optimizationStatus ?? "ready",
+    optimizationStatus,
     optimizationError: cleanText(track.optimizationError),
     originalBitDepth: bitDepth,
     originalSampleRate: sampleRate,

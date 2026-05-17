@@ -8,8 +8,20 @@ interface Props {
 
 interface State {
   hasError: boolean;
-  error: Error | null;
+  error: unknown;
 }
+
+const formatBoundaryError = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.stack || error.message || error.name;
+  }
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error, null, 2);
+  } catch {
+    return String(error);
+  }
+};
 
 class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
@@ -19,6 +31,10 @@ class ErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("[ErrorBoundary] render crash", { error, info });
   }
 
   render() {
@@ -35,7 +51,7 @@ class ErrorBoundary extends Component<Props, State> {
 
             <div className="p-4 w-full rounded bg-muted overflow-auto mb-6">
               <pre className="text-sm text-muted-foreground whitespace-break-spaces">
-                {this.state.error?.stack}
+                {formatBoundaryError(this.state.error)}
               </pre>
             </div>
 
@@ -44,7 +60,7 @@ class ErrorBoundary extends Component<Props, State> {
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-lg",
                 "bg-primary text-primary-foreground",
-                "hover:opacity-90 cursor-pointer"
+                "hover:opacity-90 cursor-pointer",
               )}
             >
               <RotateCcw size={16} />

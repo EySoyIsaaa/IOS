@@ -191,7 +191,19 @@ export default function Home() {
   const crossfade = useCrossfade();
   const { t, language, setLanguage } = useLanguage();
   const { theme, toggleTheme, switchable } = useTheme();
-  const playlistManager = usePlaylists(queue.library);
+  const safeLibrary = useMemo(() => {
+    if (!Array.isArray(queue.library)) return [];
+    return queue.library
+      .map((track) => normalizeLibraryTrack(track))
+      .filter((track): track is Track => {
+        if (!track?.id) {
+          console.warn("[SongsScreen] invalid track skipped", { track });
+          return false;
+        }
+        return true;
+      });
+  }, [queue.library]);
+  const playlistManager = usePlaylists(safeLibrary);
 
   const [activeTab, setActiveTab] = useState<TabType>("player");
   const [libraryView, setLibraryView] = useState<LibraryView>("main");

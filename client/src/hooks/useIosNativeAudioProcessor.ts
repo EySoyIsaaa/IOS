@@ -75,6 +75,7 @@ export function useIosNativeAudioProcessor() {
   const onTrackEndedRef = useRef<(() => void) | null>(null);
   const onTrackErrorRef = useRef<((error: unknown) => void) | null>(null);
   const lastAppliedTrackIdRef = useRef<string | null>(null);
+  const currentTrackIdRef = useRef<string | null>(null);
   const nativeTransitionRequestRef = useRef(0);
   const nativeTransitionContextRef = useRef<{
     requestId: number;
@@ -119,12 +120,13 @@ export function useIosNativeAudioProcessor() {
 
   const beginNativeTransition = useCallback(
     (reason: string, expectedTrackId: string | null = null) => {
+      const fromTrackId = currentTrackIdRef.current;
       const requestId = nativeTransitionRequestRef.current + 1;
       nativeTransitionRequestRef.current = requestId;
       nativeTransitionContextRef.current = {
         requestId,
         reason,
-        fromTrackId: currentTrackId,
+        fromTrackId,
         expectedTrackId,
       };
       clearNativeTransition();
@@ -141,16 +143,20 @@ export function useIosNativeAudioProcessor() {
       console.info("[iOS Native Playback] transition requested", {
         reason,
         requestId,
-        fromTrackId: currentTrackId,
+        fromTrackId,
         expectedTrackId,
       });
       return requestId;
     },
-    [clearNativeTransition, currentTrackId],
+    [clearNativeTransition],
   );
 
   const applyState = useCallback(
-    (state: IOSNativePlaybackState) => {
+    (state: IOSNativePlaybackState | null | undefined) => {
+      if (!state || typeof state !== "object") {
+        console.warn("[iOS Native Playback] ignored invalid state", state);
+        return;
+      }
       logState(state);
       setIsPlaying(!!state.isPlaying);
       setCurrentTime(state.currentTime || 0);
@@ -159,11 +165,12 @@ export function useIosNativeAudioProcessor() {
       );
       const nextTrackId =
         state.currentTrackId ?? state.currentTrack?.id ?? null;
+      currentTrackIdRef.current = nextTrackId;
       setCurrentTrackId(nextTrackId);
-      if (state.currentTrack) {
+      if (state.currentTrack?.id) {
         if (
           lastAppliedTrackIdRef.current === state.currentTrack.id &&
-          currentTrackId === state.currentTrack.id
+          currentTrackIdRef.current === state.currentTrack.id
         ) {
           console.info("[Bridge] event ignored duplicate currentTrack", {
             trackId: state.currentTrack.id,
@@ -219,7 +226,7 @@ export function useIosNativeAudioProcessor() {
         });
       }
     },
-    [currentTrackId, finishNativeTransition, shouldConfirmNativeTransition],
+    [finishNativeTransition, shouldConfirmNativeTransition],
   );
 
   const reportError = useCallback((error: unknown) => {
@@ -254,6 +261,7 @@ export function useIosNativeAudioProcessor() {
         return;
       }
       lastAppliedTrackIdRef.current = event.track.id;
+      currentTrackIdRef.current = event.track.id;
       setCurrentTrackId(event.track.id);
       setCurrentTrack(nativeTrackToAppTrack(event.track));
       if (shouldConfirmNativeTransition(event.track.id)) {
@@ -298,26 +306,21 @@ export function useIosNativeAudioProcessor() {
   );
 
   const play = useCallback(async () => {
-    const requestId = ++nativeTransitionRequestRef.current;
-    setIsNativeTransitionInProgress(true);
     try {
+      const activeTrackId = currentTrackIdRef.current;
       const state = await EpicenterNative.play(
-        currentTrackId ? { trackId: currentTrackId } : undefined,
+        activeTrackId ? { trackId: activeTrackId } : undefined,
       );
       applyState(state);
     } catch (error) {
-      if (requestId === nativeTransitionRequestRef.current)
-        setIsNativeTransitionInProgress(false);
       reportError(error);
     }
-  }, [applyState, currentTrackId, reportError]);
+  }, [applyState, reportError]);
 
   const pause = useCallback(async () => {
-    const requestId = ++nativeTransitionRequestRef.current;
-    setIsNativeTransitionInProgress(true);
     try {
       const state = await EpicenterNative.pause();
-      if (requestId === nativeTransitionRequestRef.current) applyState(state);
+      applyState(state);
     } catch (error) {
       if (requestId === nativeTransitionRequestRef.current)
         setIsNativeTransitionInProgress(false);
@@ -341,19 +344,6 @@ export function useIosNativeAudioProcessor() {
     try {
       const state = await EpicenterNative.stop();
       applyState(state);
-    } catch (error) {
-      if (requestId === nativeTransitionRequestRef.current)
-        setIsNativeTransitionInProgress(false);
-      reportError(error);
-    }
-  }, [applyState, reportError]);
-
-  const previous = useCallback(async () => {
-    const requestId = ++nativeTransitionRequestRef.current;
-    setIsNativeTransitionInProgress(true);
-    try {
-      const state = await EpicenterNative.previous();
-      if (requestId === nativeTransitionRequestRef.current) applyState(state);
     } catch (error) {
       if (requestId === nativeTransitionRequestRef.current)
         setIsNativeTransitionInProgress(false);
