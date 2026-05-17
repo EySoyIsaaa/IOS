@@ -31,7 +31,6 @@ export interface Track extends IOSAppTrack {
   sampleRate?: number;
   bitrate?: number;
   isHiRes?: boolean;
-  qualityClass?: IOSAppTrack['qualityClass'];
   sourceUri?: string;
   sourceType?: "manual-ios";
   albumId?: number;
