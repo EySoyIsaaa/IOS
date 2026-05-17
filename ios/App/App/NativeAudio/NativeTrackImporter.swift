@@ -32,6 +32,12 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
         return directory
     }()
 
+    private lazy var optimizedDirectory: URL = {
+        let directory = audioLibraryDirectory.appendingPathComponent("Optimized", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }()
+
     init(repository: NativeTrackRepository = NativeTrackRepository()) {
         self.repository = repository
         super.init()
@@ -95,6 +101,12 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
         let fileName = copiedURL.lastPathComponent
         let fileExtension = copiedURL.pathExtension.lowercased()
         let resolvedTitle = metadata.title?.nilIfBlank ?? fallbackTitle
+        let optimization = optimizeForPlaybackIfNeeded(
+            sourceURL: copiedURL,
+            stableId: stableId,
+            properties: audioProperties,
+            fileExtension: fileExtension
+        )
 
         let track = NativeTrack(
             id: UUID().uuidString,
@@ -108,6 +120,16 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
             codec: audioProperties.codec,
             qualityClass: qualityClass(sampleRate: audioProperties.sampleRate, bitDepth: audioProperties.bitDepth, bitrate: audioProperties.bitrate, codec: audioProperties.codec, fileExtension: fileExtension),
             sourceUri: sourceURL.absoluteString,
+            originalUrl: copiedURL.path,
+            playbackUrl: optimization.playbackURL?.path,
+            optimizedUrl: optimization.optimizedURL?.path,
+            optimizedForPlayback: optimization.optimizedForPlayback,
+            optimizationStatus: optimization.status,
+            optimizationError: optimization.error,
+            originalBitDepth: audioProperties.bitDepth,
+            originalSampleRate: audioProperties.sampleRate,
+            originalBitrate: audioProperties.bitrate,
+            originalFormat: fileExtension,
             bookmarkData: bookmarkData,
             localFilePath: copiedURL.path,
             sourceType: NativeTrackSourceType.manualIOS.rawValue,
@@ -134,6 +156,103 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
         }
         if let albumArtUri = importedTrack.albumArtUri, albumArtUri != savedTrack.albumArtUri {
             try? FileManager.default.removeItem(atPath: albumArtUri)
+        }
+        if let optimizedUrl = importedTrack.optimizedUrl, optimizedUrl != savedTrack.optimizedUrl {
+            try? FileManager.default.removeItem(atPath: optimizedUrl)
+        }
+    }
+
+
+    private func optimizeForPlaybackIfNeeded(
+        sourceURL: URL,
+        stableId: String,
+        properties: (sampleRate: Int?, bitDepth: Int?, bitrate: Int?, channelCount: Int?, codec: String?),
+        fileExtension: String
+    ) -> (playbackURL: URL?, optimizedURL: URL?, optimizedForPlayback: Bool, status: String, error: String?) {
+        NSLog("[ImportOptimizer] original metadata stableId=\(stableId) sampleRate=\(properties.sampleRate.map(String.init) ?? "unknown") bitDepth=\(properties.bitDepth.map(String.init) ?? "unknown") bitrate=\(properties.bitrate.map(String.init) ?? "unknown") codec=\(properties.codec ?? fileExtension) channels=\(properties.channelCount.map(String.init) ?? "unknown")")
+        let needsOptimization = (properties.bitDepth ?? 0) > 16 || (properties.sampleRate ?? 0) > 44_100
+        NSLog("[ImportOptimizer] needs optimization \(needsOptimization)")
+        guard needsOptimization else {
+            return (sourceURL, nil, false, "ready", nil)
+        }
+
+        let optimizedURL = optimizedDirectory.appendingPathComponent("\(stableId)-16bit-44100-stereo.caf")
+        if FileManager.default.fileExists(atPath: optimizedURL.path) {
+            let cachedSize = (try? optimizedURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            if cachedSize > 0 {
+                NSLog("[ImportOptimizer] cache hit \(optimizedURL.path)")
+                return (optimizedURL, optimizedURL, true, "ready", nil)
+            }
+        }
+
+        do {
+            NSLog("[ImportOptimizer] conversion start \(sourceURL.path) -> \(optimizedURL.path)")
+            try convertToOptimizedCAF(sourceURL: sourceURL, destinationURL: optimizedURL)
+            NSLog("[ImportOptimizer] conversion success \(optimizedURL.path)")
+            return (optimizedURL, optimizedURL, true, "ready", nil)
+        } catch {
+            NSLog("[ImportOptimizer] conversion failed \(error.localizedDescription)")
+            try? FileManager.default.removeItem(at: optimizedURL)
+            return (nil, optimizedURL, false, "failed", error.localizedDescription)
+        }
+    }
+
+    private func convertToOptimizedCAF(sourceURL: URL, destinationURL: URL) throws {
+        try? FileManager.default.removeItem(at: destinationURL)
+        let inputFile = try AVAudioFile(forReading: sourceURL)
+        guard inputFile.processingFormat.sampleRate > 0, inputFile.processingFormat.channelCount > 0 else {
+            throw NSError(domain: "ImportOptimizer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid source audio format"])
+        }
+        guard let outputFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 44_100, channels: 2, interleaved: true),
+              let converter = AVAudioConverter(from: inputFile.processingFormat, to: outputFormat) else {
+            throw NSError(domain: "ImportOptimizer", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unable to create 16-bit/44.1kHz/stereo converter"])
+        }
+
+        let outputSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 44_100,
+            AVNumberOfChannelsKey: 2,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ]
+        let outputFile = try AVAudioFile(forWriting: destinationURL, settings: outputSettings, commonFormat: .pcmFormatInt16, interleaved: true)
+        let inputCapacity: AVAudioFrameCount = 4096
+
+        while true {
+            guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: inputFile.processingFormat, frameCapacity: inputCapacity) else {
+                throw NSError(domain: "ImportOptimizer", code: 3, userInfo: [NSLocalizedDescriptionKey: "Unable to allocate converter input buffer"])
+            }
+            try inputFile.read(into: inputBuffer)
+            if inputBuffer.frameLength == 0 { break }
+
+            var didProvideInput = false
+            while true {
+                guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: inputCapacity) else {
+                    throw NSError(domain: "ImportOptimizer", code: 4, userInfo: [NSLocalizedDescriptionKey: "Unable to allocate converter output buffer"])
+                }
+                var conversionError: NSError?
+                let status = converter.convert(to: outputBuffer, error: &conversionError) { _, outStatus in
+                    if didProvideInput {
+                        outStatus.pointee = .noDataNow
+                        return nil
+                    }
+                    didProvideInput = true
+                    outStatus.pointee = .haveData
+                    return inputBuffer
+                }
+                if let conversionError = conversionError { throw conversionError }
+                if outputBuffer.frameLength > 0 {
+                    try outputFile.write(from: outputBuffer)
+                }
+                if status == .inputRanDry || status == .endOfStream || status == .error {
+                    if status == .error {
+                        throw NSError(domain: "ImportOptimizer", code: 5, userInfo: [NSLocalizedDescriptionKey: "Audio conversion failed"])
+                    }
+                    break
+                }
+            }
         }
     }
 

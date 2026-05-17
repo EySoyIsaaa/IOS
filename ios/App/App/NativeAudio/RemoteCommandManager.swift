@@ -42,10 +42,12 @@ final class RemoteCommandManager {
             self?.handlers?.togglePlayPause() == true ? .success : .commandFailed
         }
         commandCenter.nextTrackCommand.addTarget { [weak self] _ in
-            self?.handlers?.next() == true ? .success : .noSuchContent
+            print("[RemoteCommand] next")
+            return self?.handlers?.next() == true ? .success : .noSuchContent
         }
         commandCenter.previousTrackCommand.addTarget { [weak self] _ in
-            self?.handlers?.previous() == true ? .success : .noSuchContent
+            print("[RemoteCommand] previous")
+            return self?.handlers?.previous() == true ? .success : .noSuchContent
         }
         commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
             guard let positionEvent = event as? MPChangePlaybackPositionCommandEvent else {

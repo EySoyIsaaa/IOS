@@ -21,7 +21,6 @@ export interface Track extends IOSAppTrack {
   fileName?: string;
   fileType?: string;
   codec?: string;
-  qualityClass?: string;
   fileSize?: number;
   title: string;
   artist: string;
@@ -31,8 +30,19 @@ export interface Track extends IOSAppTrack {
   sampleRate?: number;
   bitrate?: number;
   isHiRes?: boolean;
-  qualityClass?: IOSAppTrack['qualityClass'];
+  qualityClass?: IOSAppTrack["qualityClass"];
   sourceUri?: string;
+  sourceUrl?: string;
+  originalUrl?: string;
+  playbackUrl?: string;
+  optimizedUrl?: string;
+  optimizedForPlayback?: boolean;
+  optimizationStatus?: IOSAppTrack["optimizationStatus"];
+  optimizationError?: string;
+  originalBitDepth?: number;
+  originalSampleRate?: number;
+  originalBitrate?: number;
+  originalFormat?: string;
   sourceType?: "manual-ios";
   albumId?: number;
   albumArtUri?: string;

@@ -10,7 +10,6 @@ export interface IOSAppTrack {
   fileName?: string;
   fileType?: string;
   codec?: string;
-  qualityClass?: string;
   fileSize?: number;
   title: string;
   artist: string;
@@ -21,8 +20,19 @@ export interface IOSAppTrack {
   sampleRate?: number;
   bitrate?: number;
   isHiRes?: boolean;
-  qualityClass?: AudioQualityClass;
+  qualityClass?: string;
   sourceUri?: string;
+  sourceUrl?: string;
+  originalUrl?: string;
+  playbackUrl?: string;
+  optimizedUrl?: string;
+  optimizedForPlayback?: boolean;
+  optimizationStatus?: "pending" | "processing" | "ready" | "failed";
+  optimizationError?: string;
+  originalBitDepth?: number;
+  originalSampleRate?: number;
+  originalBitrate?: number;
+  originalFormat?: string;
   sourceType?: "manual-ios";
   albumArtUri?: string;
   mediaStoreId?: string;
@@ -81,9 +91,11 @@ export const nativeTrackToAppTrack = (track: IOSNativeTrack): IOSAppTrack => {
     "Untitled";
   const artist =
     cleanText(track.artist) || cleanText(track.album) || "Unknown Artist";
-  const sampleRate = numberOrUndefined(track.sampleRate);
-  const bitDepth = numberOrUndefined(track.bitDepth);
-  const bitrate = numberOrUndefined(track.bitrate);
+  const sampleRate = numberOrUndefined(
+    track.originalSampleRate ?? track.sampleRate,
+  );
+  const bitDepth = numberOrUndefined(track.originalBitDepth ?? track.bitDepth);
+  const bitrate = numberOrUndefined(track.originalBitrate ?? track.bitrate);
   const codec = cleanText(track.codec) || cleanText(track.fileExtension);
   const albumArtUri = cleanText(track.albumArtUri);
   const fileExtension = cleanText(track.fileExtension)?.toLowerCase();
@@ -107,6 +119,19 @@ export const nativeTrackToAppTrack = (track: IOSNativeTrack): IOSAppTrack => {
     bitrate,
     isHiRes: isHiResQuality(bitDepth, sampleRate, codec, track.fileExtension),
     sourceUri: cleanText(track.sourceUri),
+    sourceUrl: cleanText(
+      track.sourceUrl ?? track.originalUrl ?? track.sourceUri,
+    ),
+    originalUrl: cleanText(track.originalUrl),
+    playbackUrl: cleanText(track.playbackUrl),
+    optimizedUrl: cleanText(track.optimizedUrl),
+    optimizedForPlayback: !!track.optimizedForPlayback,
+    optimizationStatus: track.optimizationStatus ?? "ready",
+    optimizationError: cleanText(track.optimizationError),
+    originalBitDepth: bitDepth,
+    originalSampleRate: sampleRate,
+    originalBitrate: bitrate,
+    originalFormat: cleanText(track.originalFormat ?? track.fileExtension),
     sourceType: "manual-ios",
     albumArtUri: albumArtUri ?? undefined,
     unavailable: !track.isAvailable,

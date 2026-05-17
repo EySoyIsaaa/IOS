@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { EpicenterNative, type IOSNativePlaybackState } from '@/native/iosNativeAudio';
-import { nativeTrackToAppTrack, type IOSAppTrack } from '@/native/iosTrackMapper';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  EpicenterNative,
+  type IOSNativePlaybackState,
+} from "@/native/iosNativeAudio";
+import {
+  nativeTrackToAppTrack,
+  type IOSAppTrack,
+} from "@/native/iosTrackMapper";
 
 export interface StreamingParams {
   sweepFreq: number;
@@ -25,8 +31,8 @@ export interface SpatialEffectsConfig {
 
 const EQ_FREQUENCIES = [
   20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630,
-  800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000,
-  12500, 16000, 20000,
+  800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500,
+  16000, 20000,
 ];
 
 const formatEqLabel = (frequency: number) => {
@@ -38,7 +44,8 @@ const formatEqLabel = (frequency: number) => {
 const EQ_GAIN_MIN = -8;
 const EQ_GAIN_MAX = 8;
 
-const clampEqGain = (gain: number) => Math.max(EQ_GAIN_MIN, Math.min(EQ_GAIN_MAX, gain));
+const clampEqGain = (gain: number) =>
+  Math.max(EQ_GAIN_MIN, Math.min(EQ_GAIN_MAX, gain));
 
 const DEFAULT_EQ_BANDS: EqBand[] = EQ_FREQUENCIES.map((frequency) => ({
   frequency,
@@ -47,7 +54,7 @@ const DEFAULT_EQ_BANDS: EqBand[] = EQ_FREQUENCIES.map((frequency) => ({
 }));
 
 const logState = (state: IOSNativePlaybackState) => {
-  console.info('[iOS Native Playback] state', state);
+  console.info("[iOS Native Playback] state", state);
 };
 
 export function useIosNativeAudioProcessor() {
@@ -67,24 +74,95 @@ export function useIosNativeAudioProcessor() {
   });
   const onTrackEndedRef = useRef<(() => void) | null>(null);
   const onTrackErrorRef = useRef<((error: unknown) => void) | null>(null);
+  const lastAppliedTrackIdRef = useRef<string | null>(null);
+  const nativeTransitionRequestRef = useRef(0);
+  const nativeTransitionTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+
+  const clearNativeTransition = useCallback(() => {
+    if (nativeTransitionTimeoutRef.current) {
+      clearTimeout(nativeTransitionTimeoutRef.current);
+      nativeTransitionTimeoutRef.current = null;
+    }
+  }, []);
+
+  const beginNativeTransition = useCallback(
+    (reason: string) => {
+      const requestId = nativeTransitionRequestRef.current + 1;
+      nativeTransitionRequestRef.current = requestId;
+      clearNativeTransition();
+      nativeTransitionTimeoutRef.current = setTimeout(() => {
+        if (nativeTransitionRequestRef.current === requestId) {
+          console.info("[iOS Native Playback] transition settled by timeout", {
+            reason,
+            requestId,
+          });
+          nativeTransitionRequestRef.current = 0;
+        }
+      }, 1500);
+      console.info("[iOS Native Playback] transition requested", {
+        reason,
+        requestId,
+      });
+      return requestId;
+    },
+    [clearNativeTransition],
+  );
 
   const applyState = useCallback((state: IOSNativePlaybackState) => {
     logState(state);
     setIsPlaying(!!state.isPlaying);
     setCurrentTime(state.currentTime || 0);
-    setDuration(state.duration || (state.durationMs ? state.durationMs / 1000 : 0));
-    setCurrentTrackId(state.currentTrackId ?? state.currentTrack?.id ?? null);
-    setCurrentTrack(state.currentTrack ? nativeTrackToAppTrack(state.currentTrack) : null);
+    setDuration(
+      state.duration || (state.durationMs ? state.durationMs / 1000 : 0),
+    );
+    const nextTrackId = state.currentTrackId ?? state.currentTrack?.id ?? null;
+    setCurrentTrackId(nextTrackId);
+    if (state.currentTrack) {
+      if (
+        lastAppliedTrackIdRef.current === state.currentTrack.id &&
+        currentTrackId === state.currentTrack.id
+      ) {
+        console.info("[Bridge] event ignored duplicate currentTrack", {
+          trackId: state.currentTrack.id,
+        });
+      } else {
+        lastAppliedTrackIdRef.current = state.currentTrack.id;
+        setCurrentTrack(nativeTrackToAppTrack(state.currentTrack));
+      }
+    } else {
+      lastAppliedTrackIdRef.current = null;
+      setCurrentTrack(null);
+    }
+    if (nativeTransitionRequestRef.current && nextTrackId) {
+      console.info("[iOS Native Playback] transition confirmed", {
+        requestId: nativeTransitionRequestRef.current,
+        currentTrackId: nextTrackId,
+      });
+      nativeTransitionRequestRef.current = 0;
+      clearNativeTransition();
+    }
     if (state.epicenter) {
       setEpicenterEnabledState(!!state.epicenter.enabled);
     }
     if (state.eq) {
       setEqEnabledState(!!state.eq.enabled);
-      if (Array.isArray(state.eq.bands) && state.eq.bands.length === DEFAULT_EQ_BANDS.length) {
+      if (
+        Array.isArray(state.eq.bands) &&
+        state.eq.bands.length === DEFAULT_EQ_BANDS.length
+      ) {
         setEqBands((prev) => {
           const nextGains = state.eq?.bands ?? [];
-          const unchanged = prev.every((band, index) => band.gain === (nextGains[index] ?? 0));
-          return unchanged ? prev : prev.map((band, index) => ({ ...band, gain: nextGains[index] ?? 0 }));
+          const unchanged = prev.every(
+            (band, index) => band.gain === (nextGains[index] ?? 0),
+          );
+          return unchanged
+            ? prev
+            : prev.map((band, index) => ({
+                ...band,
+                gain: nextGains[index] ?? 0,
+              }));
         });
       }
     }
@@ -107,7 +185,7 @@ export function useIosNativeAudioProcessor() {
   }, []);
 
   const reportError = useCallback((error: unknown) => {
-    console.error('[iOS Native Playback] error', error);
+    console.error("[iOS Native Playback] error", error);
     onTrackErrorRef.current?.(error);
   }, []);
 
@@ -126,30 +204,65 @@ export function useIosNativeAudioProcessor() {
     void getPlaybackState().catch(() => undefined);
 
     const handles: Array<{ remove: () => Promise<void> }> = [];
-    void EpicenterNative.addListener('playbackStateChanged', applyState).then((handle) => handles.push(handle));
-    void EpicenterNative.addListener('progressChanged', applyState).then((handle) => handles.push(handle));
-    void EpicenterNative.addListener('playbackError', (event) => reportError(event)).then((handle) => handles.push(handle));
+    void EpicenterNative.addListener("playbackStateChanged", applyState).then(
+      (handle) => handles.push(handle),
+    );
+    void EpicenterNative.addListener("currentTrackChanged", (event) => {
+      if (!event.track?.id) return;
+      if (lastAppliedTrackIdRef.current === event.track.id) {
+        console.info("[Bridge] event ignored duplicate currentTrackChanged", {
+          trackId: event.track.id,
+        });
+        return;
+      }
+      lastAppliedTrackIdRef.current = event.track.id;
+      setCurrentTrackId(event.track.id);
+      setCurrentTrack(nativeTrackToAppTrack(event.track));
+      if (nativeTransitionRequestRef.current) {
+        console.info("[iOS Native Playback] transition confirmed", {
+          requestId: nativeTransitionRequestRef.current,
+          currentTrackId: event.track.id,
+        });
+        nativeTransitionRequestRef.current = 0;
+        clearNativeTransition();
+      }
+    }).then((handle) => handles.push(handle));
+    void EpicenterNative.addListener("progressChanged", applyState).then(
+      (handle) => handles.push(handle),
+    );
+    void EpicenterNative.addListener("playbackError", (event) =>
+      reportError(event),
+    ).then((handle) => handles.push(handle));
 
     return () => {
       for (const handle of handles) void handle.remove();
     };
-  }, [applyState, getPlaybackState, reportError]);
+  }, [applyState, clearNativeTransition, getPlaybackState, reportError]);
 
-  const playTrackId = useCallback(async (trackId: string) => {
-    console.info('[iOS Native Playback] play trackId', trackId);
-    try {
-      const state = await EpicenterNative.play({ trackId });
-      applyState(state);
-      return true;
-    } catch (error) {
-      reportError(error);
-      return false;
-    }
-  }, [applyState, reportError]);
+  const playTrackId = useCallback(
+    async (trackId: string) => {
+      const requestId = beginNativeTransition("playTrackId");
+      console.info("[iOS Native Playback] play trackId", {
+        trackId,
+        requestId,
+      });
+      try {
+        const state = await EpicenterNative.play({ trackId });
+        applyState(state);
+        return true;
+      } catch (error) {
+        reportError(error);
+        return false;
+      }
+    },
+    [applyState, reportError],
+  );
 
   const play = useCallback(async () => {
     try {
-      const state = await EpicenterNative.play(currentTrackId ? { trackId: currentTrackId } : undefined);
+      const state = await EpicenterNative.play(
+        currentTrackId ? { trackId: currentTrackId } : undefined,
+      );
       applyState(state);
     } catch (error) {
       reportError(error);
@@ -165,14 +278,17 @@ export function useIosNativeAudioProcessor() {
     }
   }, [applyState, reportError]);
 
-  const seek = useCallback(async (seconds: number) => {
-    try {
-      const state = await EpicenterNative.seek({ seconds });
-      applyState(state);
-    } catch (error) {
-      reportError(error);
-    }
-  }, [applyState, reportError]);
+  const seek = useCallback(
+    async (seconds: number) => {
+      try {
+        const state = await EpicenterNative.seek({ seconds });
+        applyState(state);
+      } catch (error) {
+        reportError(error);
+      }
+    },
+    [applyState, reportError],
+  );
 
   const stop = useCallback(async () => {
     try {
@@ -183,115 +299,191 @@ export function useIosNativeAudioProcessor() {
     }
   }, [applyState, reportError]);
 
-  const setEqBandGain = useCallback((index: number, gain: number) => {
-    const clampedGain = clampEqGain(gain);
-    setEqBands((prev) => prev.map((band, bandIndex) => bandIndex === index ? { ...band, gain: clampedGain } : band));
-    void EpicenterNative.setEqBand({ index, gain: clampedGain }).catch(reportError);
-  }, [reportError]);
+  const next = useCallback(async () => {
+    const requestId = beginNativeTransition("next");
+    try {
+      const state = await EpicenterNative.next();
+      applyState(state);
+    } catch (error) {
+      if (nativeTransitionRequestRef.current === requestId)
+        nativeTransitionRequestRef.current = 0;
+      clearNativeTransition();
+      reportError(error);
+    }
+  }, [applyState, beginNativeTransition, clearNativeTransition, reportError]);
+
+  const previous = useCallback(async () => {
+    const requestId = beginNativeTransition("previous");
+    try {
+      const state = await EpicenterNative.previous();
+      applyState(state);
+    } catch (error) {
+      if (nativeTransitionRequestRef.current === requestId)
+        nativeTransitionRequestRef.current = 0;
+      clearNativeTransition();
+      reportError(error);
+    }
+  }, [applyState, beginNativeTransition, clearNativeTransition, reportError]);
+
+  const setEqBandGain = useCallback(
+    (index: number, gain: number) => {
+      const clampedGain = clampEqGain(gain);
+      setEqBands((prev) =>
+        prev.map((band, bandIndex) =>
+          bandIndex === index ? { ...band, gain: clampedGain } : band,
+        ),
+      );
+      void EpicenterNative.setEqBand({ index, gain: clampedGain }).catch(
+        reportError,
+      );
+    },
+    [reportError],
+  );
 
   useEffect(() => {
     if (!eqEnabled) return;
-    void EpicenterNative.setEqBands({ gains: eqBands.map((band) => clampEqGain(band.gain)) }).catch(reportError);
+    void EpicenterNative.setEqBands({
+      gains: eqBands.map((band) => clampEqGain(band.gain)),
+    }).catch(reportError);
   }, [eqBands, eqEnabled, reportError]);
 
-  const setEpicenterEnabled = useCallback((enabled: boolean) => {
-    setEpicenterEnabledState(enabled);
-    void EpicenterNative.setEpicenterEnabled({ enabled }).catch(reportError);
-  }, [reportError]);
+  const setEpicenterEnabled = useCallback(
+    (enabled: boolean) => {
+      setEpicenterEnabledState(enabled);
+      void EpicenterNative.setEpicenterEnabled({ enabled }).catch(reportError);
+    },
+    [reportError],
+  );
 
-  const setDspParam = useCallback((key?: keyof StreamingParams, value?: number) => {
-    if (!key || typeof value !== 'number') return;
-    void EpicenterNative.setEpicenterParams({ [key]: value }).catch(reportError);
-  }, [reportError]);
+  const setDspParam = useCallback(
+    (key?: keyof StreamingParams, value?: number) => {
+      if (!key || typeof value !== "number") return;
+      void EpicenterNative.setEpicenterParams({ [key]: value }).catch(
+        reportError,
+      );
+    },
+    [reportError],
+  );
 
-  const setEqEnabled = useCallback((enabled: boolean) => {
-    setEqEnabledState(enabled);
-    void EpicenterNative.setEqEnabled({ enabled }).catch(reportError);
-    if (enabled) void EpicenterNative.setEqBands({ gains: eqBands.map((band) => clampEqGain(band.gain)) }).catch(reportError);
-  }, [eqBands, reportError]);
+  const setEqEnabled = useCallback(
+    (enabled: boolean) => {
+      setEqEnabledState(enabled);
+      void EpicenterNative.setEqEnabled({ enabled }).catch(reportError);
+      if (enabled)
+        void EpicenterNative.setEqBands({
+          gains: eqBands.map((band) => clampEqGain(band.gain)),
+        }).catch(reportError);
+    },
+    [eqBands, reportError],
+  );
 
-  const setReverbEnabled = useCallback((enabled: boolean) => {
-    setSpatialEffects((prev) => ({ ...prev, reverbEnabled: enabled }));
-    void EpicenterNative.setReverbEnabled({ enabled }).catch(reportError);
-  }, [reportError]);
+  const setReverbEnabled = useCallback(
+    (enabled: boolean) => {
+      setSpatialEffects((prev) => ({ ...prev, reverbEnabled: enabled }));
+      void EpicenterNative.setReverbEnabled({ enabled }).catch(reportError);
+    },
+    [reportError],
+  );
 
-  const setReverbAmount = useCallback((amount: number) => {
-    setSpatialEffects((prev) => ({ ...prev, reverbAmount: amount }));
-    void EpicenterNative.setReverbAmount({ amount }).catch(reportError);
-  }, [reportError]);
+  const setReverbAmount = useCallback(
+    (amount: number) => {
+      setSpatialEffects((prev) => ({ ...prev, reverbAmount: amount }));
+      void EpicenterNative.setReverbAmount({ amount }).catch(reportError);
+    },
+    [reportError],
+  );
 
-  const setConcertHallEnabled = useCallback((enabled: boolean) => {
-    setSpatialEffects((prev) => ({ ...prev, concertHallEnabled: enabled }));
-    void EpicenterNative.setConcertHallEnabled({ enabled }).catch(reportError);
-  }, [reportError]);
+  const setConcertHallEnabled = useCallback(
+    (enabled: boolean) => {
+      setSpatialEffects((prev) => ({ ...prev, concertHallEnabled: enabled }));
+      void EpicenterNative.setConcertHallEnabled({ enabled }).catch(
+        reportError,
+      );
+    },
+    [reportError],
+  );
 
-  const setConcertHallAmount = useCallback((amount: number) => {
-    setSpatialEffects((prev) => ({ ...prev, concertHallAmount: amount }));
-    void EpicenterNative.setConcertHallAmount({ amount }).catch(reportError);
-  }, [reportError]);
+  const setConcertHallAmount = useCallback(
+    (amount: number) => {
+      setSpatialEffects((prev) => ({ ...prev, concertHallAmount: amount }));
+      void EpicenterNative.setConcertHallAmount({ amount }).catch(reportError);
+    },
+    [reportError],
+  );
 
   const resetEq = useCallback(() => {
     setEqBands(DEFAULT_EQ_BANDS);
     void EpicenterNative.resetEq().catch(reportError);
   }, [reportError]);
 
-  return useMemo(() => ({
-    currentTime,
-    duration,
-    isPlaying,
-    currentTrackId,
-    currentTrack,
-    epicenterEnabled,
-    eqEnabled,
-    eqBands,
-    spatialEffects,
-    playTrackId,
-    play,
-    pause,
-    seek,
-    stop,
-    getPlaybackState,
-    loadFile: async () => true,
-    getActiveSource: () => currentTrackId ?? '',
-    resetAfterError: () => {},
-    setOnTrackEnded: (handler: (() => void) | null) => { onTrackEndedRef.current = handler; },
-    setOnTrackError: (handler: ((error: unknown) => void) | null) => { onTrackErrorRef.current = handler; },
-    getAnalyserNode: () => null as AnalyserNode | null,
-    setCrossfadeConfig: (_config?: unknown) => {},
-    setDspParam,
-    setEpicenterEnabled,
-    setEqEnabled,
-    setEqBandGain,
-    setEqPreampDb: (_value?: number) => {},
-    resetEq,
-    setReverbEnabled,
-    setReverbAmount,
-    setConcertHallEnabled,
-    setConcertHallAmount,
-  }), [
-    currentTime,
-    duration,
-    isPlaying,
-    currentTrackId,
-    currentTrack,
-    epicenterEnabled,
-    eqEnabled,
-    eqBands,
-    spatialEffects,
-    playTrackId,
-    play,
-    pause,
-    seek,
-    stop,
-    getPlaybackState,
-    setEpicenterEnabled,
-    setDspParam,
-    setEqEnabled,
-    setEqBandGain,
-    resetEq,
-    setReverbEnabled,
-    setReverbAmount,
-    setConcertHallEnabled,
-    setConcertHallAmount,
-  ]);
+  return useMemo(
+    () => ({
+      currentTime,
+      duration,
+      isPlaying,
+      currentTrackId,
+      currentTrack,
+      epicenterEnabled,
+      eqEnabled,
+      eqBands,
+      spatialEffects,
+      playTrackId,
+      play,
+      pause,
+      seek,
+      stop,
+      next,
+      previous,
+      getPlaybackState,
+      loadFile: async () => true,
+      getActiveSource: () => currentTrackId ?? "",
+      resetAfterError: () => {},
+      setOnTrackEnded: (handler: (() => void) | null) => {
+        onTrackEndedRef.current = handler;
+      },
+      setOnTrackError: (handler: ((error: unknown) => void) | null) => {
+        onTrackErrorRef.current = handler;
+      },
+      getAnalyserNode: () => null as AnalyserNode | null,
+      setCrossfadeConfig: (_config?: unknown) => {},
+      setDspParam,
+      setEpicenterEnabled,
+      setEqEnabled,
+      setEqBandGain,
+      setEqPreampDb: (_value?: number) => {},
+      resetEq,
+      setReverbEnabled,
+      setReverbAmount,
+      setConcertHallEnabled,
+      setConcertHallAmount,
+    }),
+    [
+      currentTime,
+      duration,
+      isPlaying,
+      currentTrackId,
+      currentTrack,
+      epicenterEnabled,
+      eqEnabled,
+      eqBands,
+      spatialEffects,
+      playTrackId,
+      play,
+      pause,
+      seek,
+      stop,
+      next,
+      previous,
+      getPlaybackState,
+      setEpicenterEnabled,
+      setDspParam,
+      setEqEnabled,
+      setEqBandGain,
+      resetEq,
+      setReverbEnabled,
+      setReverbAmount,
+      setConcertHallEnabled,
+      setConcertHallAmount,
+    ],
+  );
 }
