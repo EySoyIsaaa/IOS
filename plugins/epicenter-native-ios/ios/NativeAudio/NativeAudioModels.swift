@@ -20,6 +20,16 @@ struct NativeTrack {
     let codec: String?
     let qualityClass: String?
     let sourceUri: String
+    let originalUrl: String?
+    let playbackUrl: String?
+    let optimizedUrl: String?
+    let optimizedForPlayback: Bool
+    let optimizationStatus: String
+    let optimizationError: String?
+    let originalBitDepth: Int?
+    let originalSampleRate: Int?
+    let originalBitrate: Int?
+    let originalFormat: String?
     let bookmarkData: Data?
     let localFilePath: String?
     let sourceType: String
@@ -48,6 +58,17 @@ struct NativeTrack {
             "codec": jsonOrNull(codec),
             "qualityClass": jsonOrNull(qualityClass),
             "sourceUri": sourceUri,
+            "sourceUrl": jsonOrNull(originalUrl ?? sourceUri),
+            "originalUrl": jsonOrNull(originalUrl ?? sourceUri),
+            "playbackUrl": jsonOrNull(playbackUrl),
+            "optimizedUrl": jsonOrNull(optimizedUrl),
+            "optimizedForPlayback": optimizedForPlayback,
+            "optimizationStatus": optimizationStatus,
+            "optimizationError": jsonOrNull(optimizationError),
+            "originalBitDepth": jsonOrNull(originalBitDepth ?? bitDepth),
+            "originalSampleRate": jsonOrNull(originalSampleRate ?? sampleRate),
+            "originalBitrate": jsonOrNull(originalBitrate ?? bitrate),
+            "originalFormat": jsonOrNull(originalFormat ?? fileExtension),
             "bookmarkData": jsonOrNull(bookmarkData?.base64EncodedString()),
             "localFilePath": jsonOrNull(localFilePath),
             "sourceType": sourceType,
@@ -64,27 +85,6 @@ struct NativeTrack {
             "lastPlayedAt": jsonOrNull(lastPlayedAt.map { NativeTrack.dateFormatter.string(from: $0) }),
         ]
     }
-
-    private var isHiResAudioQuality: Bool {
-        guard let sampleRate = sampleRate, sampleRate > 0 else { return false }
-        if let bitDepth = bitDepth, bitDepth > 0 {
-            return bitDepth >= 24 && sampleRate >= 48_000
-        }
-        return sampleRate >= 88_200 && NativeTrack.losslessExtensions.contains(fileExtension.lowercased())
-    }
-
-    private var audioQualityClass: String {
-        if isHiResAudioQuality { return "hi-res" }
-        let lowerExtension = fileExtension.lowercased()
-        if bitDepth == 16 && sampleRate == 44_100 { return "cd" }
-        if NativeTrack.lossyExtensions.contains(lowerExtension) { return "lossy" }
-        if NativeTrack.losslessExtensions.contains(lowerExtension) && (bitDepth != nil || sampleRate != nil) { return "lossless" }
-        if bitDepth != nil || sampleRate != nil || bitrate != nil { return "standard" }
-        return "unknown"
-    }
-
-    private static let losslessExtensions: Set<String> = ["wav", "wave", "aif", "aiff", "flac", "alac", "caf"]
-    private static let lossyExtensions: Set<String> = ["mp3", "aac", "m4a", "m4b", "ogg", "opus"]
 
     static let dateFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()

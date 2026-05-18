@@ -8,7 +8,7 @@ PODS:
 DEPENDENCIES:
   - "Capacitor (from `../../node_modules/.pnpm/@capacitor+ios@6.2.1_@capacitor+core@6.2.1/node_modules/@capacitor/ios`)"
   - "CapacitorCordova (from `../../node_modules/.pnpm/@capacitor+ios@6.2.1_@capacitor+core@6.2.1/node_modules/@capacitor/ios`)"
-  - "EpicenterNativeIos (from `../../node_modules/.pnpm/epicenter-native-ios@file+plugins+epicenter-native-ios/node_modules/epicenter-native-ios`)"
+  - "EpicenterNativeIos (from `../../plugins/epicenter-native-ios`)"
 
 EXTERNAL SOURCES:
   Capacitor:
@@ -16,13 +16,13 @@ EXTERNAL SOURCES:
   CapacitorCordova:
     :path: "../../node_modules/.pnpm/@capacitor+ios@6.2.1_@capacitor+core@6.2.1/node_modules/@capacitor/ios"
   EpicenterNativeIos:
-    :path: "../../node_modules/.pnpm/epicenter-native-ios@file+plugins+epicenter-native-ios/node_modules/epicenter-native-ios"
+    :path: "../../plugins/epicenter-native-ios"
 
 SPEC CHECKSUMS:
   Capacitor: c95400d761e376be9da6be5a05f226c0e865cebf
   CapacitorCordova: 8d93e14982f440181be7304aa9559ca631d77fff
   EpicenterNativeIos: f221dc456b176441f230099f86388a40a384fb36
 
-PODFILE CHECKSUM: 21e26ab1361bff60b5a3be1d85b5a207b317d143
+PODFILE CHECKSUM: 219193a6d4701ab6358fac4172d78fa233a65cbe
 
 COCOAPODS: 1.16.2

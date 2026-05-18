@@ -141,6 +141,7 @@ export interface IOSNativePlaybackErrorEvent {
 export interface IOSNativeCurrentTrackChangedEvent {
   status: IOSNativeAudioStatus;
   track: IOSNativeTrack;
+  requestId?: string;
 }
 
 export interface IOSNativeAudioRouteChangedEvent {
@@ -166,8 +167,8 @@ export interface EpicenterNativePlugin {
   pause(): Promise<IOSNativePlaybackState>;
   seek(params: { seconds: number }): Promise<IOSNativePlaybackState>;
   stop(): Promise<IOSNativePlaybackState>;
-  next(): Promise<IOSNativePlaybackState>;
-  previous(): Promise<IOSNativePlaybackState>;
+  next(params?: { requestId?: string }): Promise<IOSNativePlaybackState>;
+  previous(params?: { requestId?: string }): Promise<IOSNativePlaybackState>;
   setEpicenterEnabled(params: {
     enabled: boolean;
   }): Promise<Record<string, unknown>>;
@@ -222,4 +223,4 @@ export interface EpicenterNativePlugin {
 }
 
 export const EpicenterNative =
-  registerPlugin<EpicenterNativePlugin>("EpicenterNative");
+  registerPlugin<EpicenterNativePlugin>('EpicenterNative');
