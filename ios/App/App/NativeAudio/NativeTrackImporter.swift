@@ -104,6 +104,7 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
         let optimization = optimizeForPlaybackIfNeeded(
             sourceURL: copiedURL,
             stableId: stableId,
+            title: resolvedTitle,
             properties: audioProperties,
             fileExtension: fileExtension
         )
@@ -166,35 +167,58 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
     private func optimizeForPlaybackIfNeeded(
         sourceURL: URL,
         stableId: String,
+        title: String,
         properties: (sampleRate: Int?, bitDepth: Int?, bitrate: Int?, channelCount: Int?, codec: String?),
         fileExtension: String
     ) -> (playbackURL: URL?, optimizedURL: URL?, optimizedForPlayback: Bool, status: String, error: String?) {
-        NSLog("[ImportOptimizer] original metadata stableId=\(stableId) sampleRate=\(properties.sampleRate.map(String.init) ?? "unknown") bitDepth=\(properties.bitDepth.map(String.init) ?? "unknown") bitrate=\(properties.bitrate.map(String.init) ?? "unknown") codec=\(properties.codec ?? fileExtension) channels=\(properties.channelCount.map(String.init) ?? "unknown")")
-        let needsOptimization = (properties.bitDepth ?? 0) > 16 || (properties.sampleRate ?? 0) > 44_100
+        let fileFormat = (try? AVAudioFile(forReading: sourceURL).fileFormat)
+        let effectiveSampleRate = properties.sampleRate ?? fileFormat.map { Int($0.sampleRate.rounded()) }
+        NSLog("[ImportOptimizer] original metadata id=\(stableId) title=\(title) bitDepth=\(properties.bitDepth.map(String.init) ?? "unknown") sampleRate=\(effectiveSampleRate.map(String.init) ?? "unknown") bitrate=\(properties.bitrate.map(String.init) ?? "unknown") format=\(properties.codec ?? fileExtension)")
+        let needsOptimization = (properties.bitDepth ?? 0) > 16 || (effectiveSampleRate ?? 0) > 44_100
         NSLog("[ImportOptimizer] needs optimization \(needsOptimization)")
         guard needsOptimization else {
+            let info = fileInfo(at: sourceURL)
+            NSLog("[ImportOptimizer] output file exists \(info.exists)")
+            NSLog("[ImportOptimizer] output file size bytes=\(info.size)")
             return (sourceURL, nil, false, "ready", nil)
         }
 
         let optimizedURL = optimizedDirectory.appendingPathComponent("\(stableId)-16bit-44100-stereo.caf")
+        NSLog("[ImportOptimizer] optimized output url=\(optimizedURL.path)")
         if FileManager.default.fileExists(atPath: optimizedURL.path) {
-            let cachedSize = (try? optimizedURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-            if cachedSize > 0 {
+            let info = fileInfo(at: optimizedURL)
+            NSLog("[ImportOptimizer] output file exists \(info.exists)")
+            NSLog("[ImportOptimizer] output file size bytes=\(info.size)")
+            if info.exists && info.size > 0 {
                 NSLog("[ImportOptimizer] cache hit \(optimizedURL.path)")
                 return (optimizedURL, optimizedURL, true, "ready", nil)
             }
+            try? FileManager.default.removeItem(at: optimizedURL)
         }
 
         do {
-            NSLog("[ImportOptimizer] conversion start \(sourceURL.path) -> \(optimizedURL.path)")
+            NSLog("[ImportOptimizer] conversion start")
             try convertToOptimizedCAF(sourceURL: sourceURL, destinationURL: optimizedURL)
-            NSLog("[ImportOptimizer] conversion success \(optimizedURL.path)")
+            let info = fileInfo(at: optimizedURL)
+            NSLog("[ImportOptimizer] output file exists \(info.exists)")
+            NSLog("[ImportOptimizer] output file size bytes=\(info.size)")
+            guard info.exists && info.size > 0 else {
+                throw NSError(domain: "ImportOptimizer", code: 8, userInfo: [NSLocalizedDescriptionKey: "Optimized output file was not created or is empty"])
+            }
+            _ = try AVAudioFile(forReading: optimizedURL)
+            NSLog("[ImportOptimizer] conversion success")
             return (optimizedURL, optimizedURL, true, "ready", nil)
         } catch {
-            NSLog("[ImportOptimizer] conversion failed \(error.localizedDescription)")
+            NSLog("[ImportOptimizer] conversion failed error=\(error.localizedDescription)")
             try? FileManager.default.removeItem(at: optimizedURL)
             return (nil, optimizedURL, false, "failed", error.localizedDescription)
         }
+    }
+
+    private func fileInfo(at url: URL) -> (exists: Bool, size: Int64) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return (false, 0) }
+        let size = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        return (true, size)
     }
 
     private func convertToOptimizedCAF(sourceURL: URL, destinationURL: URL) throws {

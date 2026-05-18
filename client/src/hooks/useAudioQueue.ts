@@ -111,6 +111,9 @@ export interface QueueController {
 
 const DEFAULT_PAGE_SIZE = 1000;
 
+const nextRequestId = (action: "next" | "previous") =>
+  `webqueue-${action}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
 const nativeTrackToTrack = nativeTrackToAppTrack;
 
 const isValidTrack = (track: Track | null | undefined): track is Track =>
@@ -339,19 +342,27 @@ export function useAudioQueue(): QueueController {
   }, []);
 
   const nextTrack = useCallback(() => {
-    console.info("[Queue] next requested via native authority", {
-      currentIndex: currentTrackIndex,
-      queueLength: queue.length,
-    });
-    void EpicenterNative.next();
+    const requestId = nextRequestId("next");
+    console.info(
+      `[WebQueue] nextTrack called requestId=${requestId} platform=ios action=delegating-to-native`,
+      {
+        currentIndex: currentTrackIndex,
+        queueLength: queue.length,
+      },
+    );
+    void EpicenterNative.next({ requestId });
   }, [currentTrackIndex, queue.length]);
 
   const previousTrack = useCallback(() => {
-    console.info("[Queue] previous requested via native authority", {
-      currentIndex: currentTrackIndex,
-      queueLength: queue.length,
-    });
-    void EpicenterNative.previous();
+    const requestId = nextRequestId("previous");
+    console.info(
+      `[WebQueue] previousTrack called requestId=${requestId} platform=ios action=delegating-to-native`,
+      {
+        currentIndex: currentTrackIndex,
+        queueLength: queue.length,
+      },
+    );
+    void EpicenterNative.previous({ requestId });
   }, [currentTrackIndex, queue.length]);
 
   const syncCurrentTrackById = useCallback(

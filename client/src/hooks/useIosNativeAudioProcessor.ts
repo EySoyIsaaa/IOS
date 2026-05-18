@@ -254,6 +254,7 @@ export function useIosNativeAudioProcessor() {
     );
     void EpicenterNative.addListener("currentTrackChanged", (event) => {
       if (!event.track?.id) return;
+      console.info(`[Web] currentTrackChanged received requestId=${event.requestId ?? "none"} trackId=${event.track.id}`);
       if (lastAppliedTrackIdRef.current === event.track.id) {
         console.info("[Bridge] event ignored duplicate currentTrackChanged", {
           trackId: event.track.id,
@@ -347,31 +348,31 @@ export function useIosNativeAudioProcessor() {
     }
   }, [applyState, reportError]);
 
-  const next = useCallback(async () => {
-    const requestId = beginNativeTransition("next");
+  const next = useCallback(async (incomingRequestId?: string) => {
+    const requestId = incomingRequestId ?? `processor-next-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    console.info(`[Processor] next called requestId=${requestId}`);
+    beginNativeTransition("next");
     try {
-      const state = await EpicenterNative.next();
+      const state = await EpicenterNative.next({ requestId });
       applyState(state);
     } catch (error) {
-      if (nativeTransitionRequestRef.current === requestId) {
-        nativeTransitionRequestRef.current = 0;
-        nativeTransitionContextRef.current = null;
-      }
+      nativeTransitionRequestRef.current = 0;
+      nativeTransitionContextRef.current = null;
       clearNativeTransition();
       reportError(error);
     }
   }, [applyState, beginNativeTransition, clearNativeTransition, reportError]);
 
-  const previous = useCallback(async () => {
-    const requestId = beginNativeTransition("previous");
+  const previous = useCallback(async (incomingRequestId?: string) => {
+    const requestId = incomingRequestId ?? `processor-previous-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    console.info(`[Processor] previous called requestId=${requestId}`);
+    beginNativeTransition("previous");
     try {
-      const state = await EpicenterNative.previous();
+      const state = await EpicenterNative.previous({ requestId });
       applyState(state);
     } catch (error) {
-      if (nativeTransitionRequestRef.current === requestId) {
-        nativeTransitionRequestRef.current = 0;
-        nativeTransitionContextRef.current = null;
-      }
+      nativeTransitionRequestRef.current = 0;
+      nativeTransitionContextRef.current = null;
       clearNativeTransition();
       reportError(error);
     }
