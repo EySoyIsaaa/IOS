@@ -50,6 +50,14 @@ final class RemoteCommandManager {
         commandCenter.previousTrackCommand.removeTarget(nil)
         commandCenter.changePlaybackPositionCommand.removeTarget(nil)
 
+        print("[RemoteCommandManager] registering remote commands")
+        commandCenter.playCommand.removeTarget(nil)
+        commandCenter.pauseCommand.removeTarget(nil)
+        commandCenter.togglePlayPauseCommand.removeTarget(nil)
+        commandCenter.nextTrackCommand.removeTarget(nil)
+        commandCenter.previousTrackCommand.removeTarget(nil)
+        commandCenter.changePlaybackPositionCommand.removeTarget(nil)
+
         commandCenter.playCommand.isEnabled = true
         commandCenter.pauseCommand.isEnabled = true
         commandCenter.togglePlayPauseCommand.isEnabled = true

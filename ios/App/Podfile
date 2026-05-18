@@ -11,7 +11,7 @@ install! 'cocoapods', :disable_input_output_paths => true
 def capacitor_pods
   pod 'Capacitor', :path => '../../node_modules/.pnpm/@capacitor+ios@6.2.1_@capacitor+core@6.2.1/node_modules/@capacitor/ios'
   pod 'CapacitorCordova', :path => '../../node_modules/.pnpm/@capacitor+ios@6.2.1_@capacitor+core@6.2.1/node_modules/@capacitor/ios'
-  pod 'EpicenterNativeIos', :path => '../../node_modules/.pnpm/epicenter-native-ios@file+plugins+epicenter-native-ios/node_modules/epicenter-native-ios'
+  pod 'EpicenterNativeIos', :path => '../../plugins/epicenter-native-ios'
 end
 
 target 'App' do
