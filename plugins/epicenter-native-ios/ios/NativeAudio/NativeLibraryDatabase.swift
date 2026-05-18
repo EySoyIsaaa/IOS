@@ -92,7 +92,7 @@ final class NativeLibraryDatabase {
             guard sqlite3_step(statement) == SQLITE_DONE else {
                 throw DatabaseError.stepFailed(lastErrorMessage())
             }
-            logSavedTrack(track)
+            logTrackFile(prefix: "saved", track: track)
         }
     }
 
@@ -318,25 +318,6 @@ final class NativeLibraryDatabase {
         bindNullableText(track.originalFormat, to: statement, at: 35)
     }
 
-
-    private func logSavedTrack(_ track: NativeTrack) {
-        let info = playbackFileInfo(path: track.playbackUrl)
-        NSLog("[NativeLibraryDatabase] saved track id=\(track.id) title=\(track.title) optimizationStatus=\(track.optimizationStatus) playbackUrl=\(track.playbackUrl ?? "nil") optimizedUrl=\(track.optimizedUrl ?? "nil")")
-        NSLog("[NativeLibraryDatabase] playback file exists \(info.exists) size=\(info.size)")
-    }
-
-    private func logLoadedTrack(_ track: NativeTrack) {
-        let info = playbackFileInfo(path: track.playbackUrl)
-        NSLog("[NativeLibraryDatabase] loaded track id=\(track.id) title=\(track.title) optimizationStatus=\(track.optimizationStatus) playbackUrl=\(track.playbackUrl ?? "nil") optimizedUrl=\(track.optimizedUrl ?? "nil")")
-        NSLog("[NativeLibraryDatabase] playback file exists \(info.exists) size=\(info.size)")
-    }
-
-    private func playbackFileInfo(path: String?) -> (exists: Bool, size: Int64) {
-        guard let path = path, !path.isEmpty, FileManager.default.fileExists(atPath: path) else { return (false, 0) }
-        let size = Int64((try? URL(fileURLWithPath: path).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
-        return (true, size)
-    }
-
     private func bindSearch(_ value: String, to statement: OpaquePointer?) {
         let escaped = "%\(value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "%", with: "\\%").replacingOccurrences(of: "_", with: "\\_"))%"
         for index in 1...4 {
@@ -427,8 +408,24 @@ final class NativeLibraryDatabase {
             playCount: Int(sqlite3_column_int(statement, 21)),
             lastPlayedAt: date(statement, 22)
         )
-        logLoadedTrack(track)
+        logTrackFile(prefix: "loaded", track: track)
         return track
+    }
+
+
+    private func logTrackFile(prefix: String, track: NativeTrack) {
+        let path = track.playbackUrl
+        let info = playbackFileInfo(path: path)
+        NSLog("[NativeLibraryDatabase] \(prefix) track id=\(track.id) title=\(track.title) optimizationStatus=\(track.optimizationStatus) playbackUrl=\(path ?? "nil") optimizedUrl=\(track.optimizedUrl ?? "nil")")
+        NSLog("[NativeLibraryDatabase] playback file exists \(info.exists) size=\(info.size)")
+    }
+
+    private func playbackFileInfo(path: String?) -> (exists: Bool, size: Int64) {
+        guard let path = path, !path.isEmpty, FileManager.default.fileExists(atPath: path) else {
+            return (false, 0)
+        }
+        let size = ((try? URL(fileURLWithPath: path).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        return (true, Int64(size))
     }
 
     private func text(_ statement: OpaquePointer?, _ index: Int32) -> String? {

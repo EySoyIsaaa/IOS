@@ -98,8 +98,8 @@ export interface QueueController {
   shuffleAll: (tracks: Track[], firstTrackId?: string) => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
   playTrack: (index: number) => void;
-  nextTrack: () => void;
-  previousTrack: () => void;
+  nextTrack: (requestId?: string) => void;
+  previousTrack: (requestId?: string) => void;
   syncCurrentTrackById: (trackId: string) => void;
   persistEphemeralTrack: (trackId: string) => Promise<boolean>;
   addTrack: (file: File) => Promise<void>;
@@ -341,27 +341,19 @@ export function useAudioQueue(): QueueController {
     void setNativeQueue(shuffled, 0);
   }, []);
 
-  const nextTrack = useCallback(() => {
-    const requestId = nextRequestId("next");
-    console.info(
-      `[WebQueue] nextTrack called requestId=${requestId} platform=ios action=delegating-to-native`,
-      {
-        currentIndex: currentTrackIndex,
-        queueLength: queue.length,
-      },
-    );
+  const nextTrack = useCallback((requestId = `webqueue-next-${Date.now()}`) => {
+    console.info(`[WebQueue] nextTrack called requestId=${requestId} platform=ios action=delegating-to-native`, {
+      currentIndex: currentTrackIndex,
+      queueLength: queue.length,
+    });
     void EpicenterNative.next({ requestId });
   }, [currentTrackIndex, queue.length]);
 
-  const previousTrack = useCallback(() => {
-    const requestId = nextRequestId("previous");
-    console.info(
-      `[WebQueue] previousTrack called requestId=${requestId} platform=ios action=delegating-to-native`,
-      {
-        currentIndex: currentTrackIndex,
-        queueLength: queue.length,
-      },
-    );
+  const previousTrack = useCallback((requestId = `webqueue-previous-${Date.now()}`) => {
+    console.info(`[WebQueue] previousTrack called requestId=${requestId} platform=ios action=delegating-to-native`, {
+      currentIndex: currentTrackIndex,
+      queueLength: queue.length,
+    });
     void EpicenterNative.previous({ requestId });
   }, [currentTrackIndex, queue.length]);
 

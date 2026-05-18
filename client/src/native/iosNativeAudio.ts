@@ -143,6 +143,7 @@ export interface IOSNativeCurrentTrackChangedEvent {
   requestId?: string;
   index?: number;
   track: IOSNativeTrack;
+  requestId?: string;
 }
 
 export interface IOSNativeAudioRouteChangedEvent {

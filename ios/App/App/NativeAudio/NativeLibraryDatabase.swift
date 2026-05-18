@@ -92,7 +92,7 @@ final class NativeLibraryDatabase {
             guard sqlite3_step(statement) == SQLITE_DONE else {
                 throw DatabaseError.stepFailed(lastErrorMessage())
             }
-            logSavedTrack(track)
+            logTrackFile(prefix: "saved", track: track)
         }
     }
 
@@ -427,8 +427,24 @@ final class NativeLibraryDatabase {
             playCount: Int(sqlite3_column_int(statement, 21)),
             lastPlayedAt: date(statement, 22)
         )
-        logLoadedTrack(track)
+        logTrackFile(prefix: "loaded", track: track)
         return track
+    }
+
+
+    private func logTrackFile(prefix: String, track: NativeTrack) {
+        let path = track.playbackUrl
+        let info = playbackFileInfo(path: path)
+        NSLog("[NativeLibraryDatabase] \(prefix) track id=\(track.id) title=\(track.title) optimizationStatus=\(track.optimizationStatus) playbackUrl=\(path ?? "nil") optimizedUrl=\(track.optimizedUrl ?? "nil")")
+        NSLog("[NativeLibraryDatabase] playback file exists \(info.exists) size=\(info.size)")
+    }
+
+    private func playbackFileInfo(path: String?) -> (exists: Bool, size: Int64) {
+        guard let path = path, !path.isEmpty, FileManager.default.fileExists(atPath: path) else {
+            return (false, 0)
+        }
+        let size = ((try? URL(fileURLWithPath: path).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        return (true, Int64(size))
     }
 
     private func text(_ statement: OpaquePointer?, _ index: Int32) -> String? {

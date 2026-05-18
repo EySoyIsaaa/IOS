@@ -4,6 +4,10 @@ import Foundation
 final class NativeAudioEngine {
     enum EngineError: Error, LocalizedError {
         case missingLocalFilePath
+        case optimizationNotReady(String)
+        case playbackUrlMissing
+        case playbackFileMissing(String)
+        case engineOpenFailed(String)
         case fileUnavailable(String)
         case noLoadedTrack
         case noPlayableFrames
@@ -18,10 +22,14 @@ final class NativeAudioEngine {
 
         var errorDescription: String? {
             switch self {
-            case .missingLocalFilePath:
-                return "Track does not have a local file path"
-            case .fileUnavailable(let path):
+            case .missingLocalFilePath, .playbackUrlMissing:
+                return "Track does not have a playback URL"
+            case .optimizationNotReady(let message):
+                return message
+            case .playbackFileMissing(let path), .fileUnavailable(let path):
                 return "Audio file is not available at \(path)"
+            case .engineOpenFailed(let message):
+                return message
             case .noLoadedTrack:
                 return "No track is loaded"
             case .noPlayableFrames:
@@ -40,10 +48,14 @@ final class NativeAudioEngine {
 
         var errorCode: String {
             switch self {
-            case .missingLocalFilePath:
+            case .optimizationNotReady:
+                return "optimization_not_ready"
+            case .missingLocalFilePath, .playbackUrlMissing:
                 return "playback_url_missing"
-            case .fileUnavailable:
+            case .fileUnavailable, .playbackFileMissing:
                 return "playback_file_missing"
+            case .engineOpenFailed:
+                return "engine_open_failed"
             case .noLoadedTrack:
                 return "no_loaded_track"
             case .noPlayableFrames:
@@ -56,8 +68,10 @@ final class NativeAudioEngine {
                 return "file_too_large"
             case .bufferAllocationFailed:
                 return "buffer_allocation_failed"
-            case .decodeFailed, .decoderError, .audioFormatError:
+            case .decodeFailed, .decoderError:
                 return "decode_failed"
+            case .audioFormatError:
+                return "audio_format_error"
             case .engineStartError:
                 return "engine_start_failed"
             }
@@ -89,10 +103,6 @@ final class NativeAudioEngine {
     private var audioFile: AVAudioFile?
     private var audioBuffer: AVAudioPCMBuffer?
     private var audioFormat: AVAudioFormat?
-    private var fallbackAudioFile: AVAudioFile?
-    private var fallbackStartTime: AVAudioTime?
-    private var fallbackStartFrame: AVAudioFramePosition = 0
-    private var isFallbackPlayback = false
     private var loadedTrack: NativeTrack?
     private var scheduledStartFrame: AVAudioFramePosition = 0
     private var pausedFrame: AVAudioFramePosition = 0
@@ -129,7 +139,6 @@ final class NativeAudioEngine {
         engine.connect(eqNode, to: reverbNode, format: nil)
         engine.connect(reverbNode, to: concertHallNode, format: nil)
         engine.connect(concertHallNode, to: engine.mainMixerNode, format: nil)
-        engine.connect(fallbackPlayerNode, to: engine.mainMixerNode, format: nil)
         configureSourceNode(format: AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!)
         updateHeadroom()
         engine.prepare()
@@ -139,19 +148,20 @@ final class NativeAudioEngine {
         print("[AudioCompat] metadata completa id=\(track.id) title=\(track.title) codec=\(track.codec ?? "unknown") ext=\(track.originalFormat ?? track.fileExtension) originalSampleRate=\(track.originalSampleRate.map(String.init) ?? "unknown") originalBitDepth=\(track.originalBitDepth.map(String.init) ?? "unknown") originalBitrate=\(track.originalBitrate.map(String.init) ?? "unknown") channels=\(track.channelCount.map(String.init) ?? "unknown") size=\(track.sizeBytes) optimizationStatus=\(track.optimizationStatus)")
         print("[NativeAudioEngine] original metadata shown separately originalUrl=\(track.originalUrl ?? track.sourceUri)")
         guard track.optimizationStatus == "ready" else {
-            print("[NativeAudioEngine] playback aborted safely optimizationStatus=\(track.optimizationStatus) error=\(track.optimizationError ?? "unknown")")
-            throw EngineError.audioFormatError(track.optimizationError ?? "Track is not optimized for playback")
+            let reason = track.optimizationError ?? "Track is not optimized for playback"
+            print("[NativeAudioEngine] playback aborted safely optimizationStatus=\(track.optimizationStatus) error=\(reason)")
+            throw EngineError.optimizationNotReady(reason)
         }
         guard let localFilePath = track.playbackUrl, !localFilePath.isEmpty else {
             print("[NativeAudioEngine] playback aborted safely missing playbackUrl trackId=\(track.id)")
-            throw EngineError.missingLocalFilePath
+            throw EngineError.playbackUrlMissing
         }
-        print("[NativeAudioEngine] using playbackUrl=\(localFilePath)")
-        let inputInfo = fileInfo(path: localFilePath)
-        print("[NativeAudioEngine] file exists \(inputInfo.exists) size=\(inputInfo.size)")
-        guard inputInfo.exists else {
+        let fileInfo = NativeAudioEngine.fileInfo(path: localFilePath)
+        print("[NativeAudioEngine] using playbackUrl=\(localFilePath) originalUrl=\(track.originalUrl ?? track.sourceUri)")
+        print("[NativeAudioEngine] file exists \(fileInfo.exists) size=\(fileInfo.size)")
+        guard fileInfo.exists, fileInfo.size > 0 else {
             print("[NativeAudioEngine] playback aborted safely playbackUrl missing path=\(localFilePath)")
-            throw EngineError.fileUnavailable(localFilePath)
+            throw EngineError.playbackFileMissing(localFilePath)
         }
 
         scheduleToken += 1
@@ -167,24 +177,21 @@ final class NativeAudioEngine {
         do {
             try loadFullBufferForDSP(track: track, localFilePath: localFilePath, startAt: seconds)
         } catch let error as EngineError {
-            print("[NativeAudioEngine] decode failed error=\(error.localizedDescription)")
-            do {
-                try loadFallbackWithoutDSP(track: track, localFilePath: localFilePath, startAt: seconds, cause: error)
-            } catch let fallbackError as EngineError {
-                throw fallbackError
-            } catch {
-                throw EngineError.decoderError(error.localizedDescription)
-            }
+            print("[NativeAudioEngine] decode failed code=\(error.errorCode) message=\(error.localizedDescription)")
+            throw error
         } catch {
             print("[NativeAudioEngine] decode failed error=\(error.localizedDescription)")
-            do {
-                try loadFallbackWithoutDSP(track: track, localFilePath: localFilePath, startAt: seconds, cause: error)
-            } catch let fallbackError as EngineError {
-                throw fallbackError
-            } catch {
-                throw EngineError.decoderError(error.localizedDescription)
-            }
+            throw EngineError.decodeFailed(error.localizedDescription)
         }
+    }
+
+
+    private static func fileInfo(path: String) -> (exists: Bool, size: Int64) {
+        guard FileManager.default.fileExists(atPath: path) else {
+            return (false, 0)
+        }
+        let size = ((try? URL(fileURLWithPath: path).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        return (true, Int64(size))
     }
 
     private func loadFullBufferForDSP(track: NativeTrack, localFilePath: String, startAt seconds: Double) throws {
@@ -229,7 +236,7 @@ final class NativeAudioEngine {
             try file.read(into: buffer)
         } catch {
             print("[NativeAudioEngine] decode failed error=\(error.localizedDescription)")
-            throw EngineError.decoderError(error.localizedDescription)
+            throw EngineError.decodeFailed(error.localizedDescription)
         }
         audioFile = file
         audioBuffer = buffer
@@ -245,59 +252,9 @@ final class NativeAudioEngine {
         _ = try scheduleSegment(from: pausedFrame)
     }
 
-    private func loadFallbackWithoutDSP(track: NativeTrack, localFilePath: String, startAt seconds: Double, cause: Error) throws {
-        print("[NativeAudioEngine] fallback without DSP cause=\(cause.localizedDescription)")
-        let file: AVAudioFile
-        do {
-            file = try AVAudioFile(forReading: URL(fileURLWithPath: localFilePath))
-        } catch {
-            print("[NativeAudioEngine] open failed error=\(error.localizedDescription)")
-            throw EngineError.engineOpenFailed(error.localizedDescription)
-        }
-        print("[NativeAudioEngine] open success")
-        print("[NativeAudioEngine] fileFormat=\(file.fileFormat)")
-        print("[NativeAudioEngine] processingFormat=\(file.processingFormat)")
-        guard file.processingFormat.sampleRate > 0, file.processingFormat.channelCount > 0, file.length > 0 else {
-            throw EngineError.audioFormatError("Fallback audio format is not playable")
-        }
-        audioFile = file
-        audioBuffer = nil
-        audioFormat = file.processingFormat
-        fallbackAudioFile = file
-        isFallbackPlayback = true
-        loadedTrack = track
-        isPlaying = false
-        isScheduled = false
-        pausedFrame = framePosition(for: seconds, in: file)
-        scheduledStartFrame = pausedFrame
-        fallbackStartFrame = pausedFrame
-        scheduleFallbackSegment(from: pausedFrame)
-    }
-
     func play() throws {
         guard audioFile != nil else {
             throw EngineError.noLoadedTrack
-        }
-        if isFallbackPlayback {
-            if !isScheduled {
-                scheduleFallbackSegment(from: pausedFrame)
-            }
-            guard isScheduled else {
-                throw EngineError.noPlayableFrames
-            }
-            if !engine.isRunning {
-                do {
-                    try engine.start()
-                } catch {
-                    print("[NativeAudioEngine] engine start failed error=\(error.localizedDescription)")
-                    throw EngineError.engineStartError(error.localizedDescription)
-                }
-            }
-            fallbackPlayerNode.play()
-            fallbackStartTime = fallbackPlayerNode.lastRenderTime
-            fallbackStartFrame = pausedFrame
-            isPlaying = true
-            return
         }
         if !isScheduled {
             _ = try scheduleSegment(from: pausedFrame)
@@ -340,8 +297,6 @@ final class NativeAudioEngine {
             audioFile = nil
             audioBuffer = nil
             audioFormat = nil
-            fallbackAudioFile = nil
-            isFallbackPlayback = false
         }
     }
 
@@ -381,14 +336,13 @@ final class NativeAudioEngine {
                 do {
                     try engine.start()
                 } catch {
-                    print("[NativeAudioEngine] engine start failed seek error=\(error.localizedDescription)")
+                    print("[NativeAudioEngine] engine start failed error=\(error.localizedDescription)")
                     throw EngineError.engineStartError(error.localizedDescription)
                 }
             }
             isPlaying = true
         }
     }
-
 
     func setEpicenterEnabled(_ enabled: Bool) -> [String: Any] {
         epicenterDSP.setEnabled(enabled)
