@@ -413,6 +413,9 @@ export default function Home() {
     });
   }, [crossfade.enabled, crossfade.duration, audioProcessor]);
 
+  const createPlaybackRequestId = (action: "next" | "previous") =>
+    `ui-${action}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
   const handleNextTrack = useCallback(
     (
       source:

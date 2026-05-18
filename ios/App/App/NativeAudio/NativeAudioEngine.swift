@@ -11,6 +11,7 @@ final class NativeAudioEngine {
         case fileUnavailable(String)
         case noLoadedTrack
         case noPlayableFrames
+        case engineOpenFailed(String)
         case invalidAudioFile(String)
         case fileTooLarge(String)
         case bufferAllocationFailed(String)
@@ -33,7 +34,8 @@ final class NativeAudioEngine {
                 return "No track is loaded"
             case .noPlayableFrames:
                 return "No playable audio frames remain for the loaded track"
-            case .invalidAudioFile(let message),
+            case .engineOpenFailed(let message),
+                 .invalidAudioFile(let message),
                  .fileTooLarge(let message),
                  .bufferAllocationFailed(let message),
                  .decodeFailed(let message),
@@ -58,8 +60,10 @@ final class NativeAudioEngine {
                 return "no_loaded_track"
             case .noPlayableFrames:
                 return "no_playable_frames"
+            case .engineOpenFailed:
+                return "engine_open_failed"
             case .invalidAudioFile:
-                return "unsupported_format"
+                return "decode_failed"
             case .fileTooLarge:
                 return "file_too_large"
             case .bufferAllocationFailed:
@@ -421,6 +425,12 @@ final class NativeAudioEngine {
         return state
     }
 
+
+    private func fileInfo(path: String) -> (exists: Bool, size: Int64) {
+        guard FileManager.default.fileExists(atPath: path) else { return (false, 0) }
+        let size = Int64((try? URL(fileURLWithPath: path).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        return (true, size)
+    }
 
     private func configureEQNode() {
         for (index, band) in eqNode.bands.enumerated() {

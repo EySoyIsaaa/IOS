@@ -111,6 +111,9 @@ export interface QueueController {
 
 const DEFAULT_PAGE_SIZE = 1000;
 
+const nextRequestId = (action: "next" | "previous") =>
+  `webqueue-${action}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
 const nativeTrackToTrack = nativeTrackToAppTrack;
 
 const isValidTrack = (track: Track | null | undefined): track is Track =>

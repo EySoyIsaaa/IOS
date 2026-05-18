@@ -394,9 +394,9 @@ final class NativePlaybackController {
                 print("[NativePlaybackController] currentTrackChanged requestId=\(requestId) trackId=\(track.id) index=\(index)")
                 emit("currentTrackChanged", ["status": "ok", "requestId": requestId, "track": track.dictionary])
             }
-            try engine.play()
             temporarilyFailedTrackIds.remove(track.id)
-            let state = engine.playbackState(queue: queueManager.dictionary)
+            var state = engine.playbackState(queue: queueManager.dictionary)
+            state["requestId"] = requestId
             updateNowPlayingPlayback(from: state, playbackRate: 1, force: true)
             emit("playbackStateChanged", state.merging(["requestId": requestId]) { current, _ in current })
             startProgressTimerIfNeeded()
@@ -646,6 +646,9 @@ final class NativePlaybackController {
 
     private func emit(_ eventName: String, _ data: [String: Any]) {
         guard let eventEmitter = eventEmitter else { return }
+        if eventName == "currentTrackChanged", let track = data["track"] as? [String: Any] {
+            print("[Bridge] event currentTrackChanged requestId=\(data["requestId"] as? String ?? "none") trackId=\(track["id"] as? String ?? "nil")")
+        }
         DispatchQueue.main.async {
             eventEmitter(eventName, data)
         }

@@ -258,6 +258,12 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
         }
     }
 
+    private func fileInfo(at url: URL) -> (exists: Bool, size: Int64) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return (false, 0) }
+        let size = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        return (true, size)
+    }
+
     private func convertToOptimizedCAF(sourceURL: URL, destinationURL: URL) throws {
         try? FileManager.default.removeItem(at: destinationURL)
         let inputFile = try AVAudioFile(forReading: sourceURL)

@@ -11,6 +11,7 @@ final class NativeAudioEngine {
         case fileUnavailable(String)
         case noLoadedTrack
         case noPlayableFrames
+        case engineOpenFailed(String)
         case invalidAudioFile(String)
         case fileTooLarge(String)
         case bufferAllocationFailed(String)
@@ -33,7 +34,8 @@ final class NativeAudioEngine {
                 return "No track is loaded"
             case .noPlayableFrames:
                 return "No playable audio frames remain for the loaded track"
-            case .invalidAudioFile(let message),
+            case .engineOpenFailed(let message),
+                 .invalidAudioFile(let message),
                  .fileTooLarge(let message),
                  .bufferAllocationFailed(let message),
                  .decodeFailed(let message),
@@ -58,8 +60,10 @@ final class NativeAudioEngine {
                 return "no_loaded_track"
             case .noPlayableFrames:
                 return "no_playable_frames"
+            case .engineOpenFailed:
+                return "engine_open_failed"
             case .invalidAudioFile:
-                return "unsupported_format"
+                return "decode_failed"
             case .fileTooLarge:
                 return "file_too_large"
             case .bufferAllocationFailed:
@@ -94,6 +98,7 @@ final class NativeAudioEngine {
     private let eqNode = AVAudioUnitEQ(numberOfBands: NativeAudioEngine.eqFrequencies.count)
     private let reverbNode = AVAudioUnitReverb()
     private let concertHallNode = AVAudioUnitReverb()
+    private let fallbackPlayerNode = AVAudioPlayerNode()
     private var sourceNode: AVAudioSourceNode?
     private var audioFile: AVAudioFile?
     private var audioBuffer: AVAudioPCMBuffer?
@@ -122,6 +127,7 @@ final class NativeAudioEngine {
     init() {
         engine.attach(eqNode)
         engine.attach(reverbNode)
+        engine.attach(fallbackPlayerNode)
         engine.attach(concertHallNode)
         configureEQNode()
         reverbNode.loadFactoryPreset(.mediumRoom)
@@ -162,6 +168,11 @@ final class NativeAudioEngine {
         if engine.isRunning {
             engine.pause()
         }
+        fallbackPlayerNode.stop()
+        isFallbackPlayback = false
+        fallbackAudioFile = nil
+        fallbackStartTime = nil
+        fallbackStartFrame = 0
 
         do {
             try loadFullBufferForDSP(track: track, localFilePath: localFilePath, startAt: seconds)
@@ -266,11 +277,15 @@ final class NativeAudioEngine {
         guard audioFile != nil else { return }
         pausedFrame = currentFramePosition()
         isPlaying = false
+        if isFallbackPlayback {
+            fallbackPlayerNode.pause()
+        }
         engine.pause()
     }
 
     func stop(clearTrack: Bool = false) {
         scheduleToken += 1
+        fallbackPlayerNode.stop()
         engine.pause()
         isPlaying = false
         isScheduled = false
@@ -295,6 +310,25 @@ final class NativeAudioEngine {
         isPlaying = false
         isScheduled = false
         pausedFrame = targetFrame
+        if isFallbackPlayback {
+            fallbackPlayerNode.stop()
+            scheduleFallbackSegment(from: targetFrame)
+            if wasPlaying, isScheduled {
+                if !engine.isRunning {
+                    do {
+                        try engine.start()
+                    } catch {
+                        print("[NativeAudioEngine] engine start failed error=\(error.localizedDescription)")
+                        throw EngineError.engineStartError(error.localizedDescription)
+                    }
+                }
+                fallbackPlayerNode.play()
+                fallbackStartTime = fallbackPlayerNode.lastRenderTime
+                fallbackStartFrame = targetFrame
+                isPlaying = true
+            }
+            return
+        }
         epicenterDSP.reset()
         _ = try scheduleSegment(from: targetFrame)
         if wasPlaying, isScheduled {
@@ -421,6 +455,12 @@ final class NativeAudioEngine {
         return state
     }
 
+
+    private func fileInfo(path: String) -> (exists: Bool, size: Int64) {
+        guard FileManager.default.fileExists(atPath: path) else { return (false, 0) }
+        let size = Int64((try? URL(fileURLWithPath: path).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        return (true, size)
+    }
 
     private func configureEQNode() {
         for (index, band) in eqNode.bands.enumerated() {
@@ -593,6 +633,36 @@ final class NativeAudioEngine {
         return true
     }
 
+    private func scheduleFallbackSegment(from frame: AVAudioFramePosition) {
+        guard let file = fallbackAudioFile else {
+            isScheduled = false
+            return
+        }
+        let clampedFrame = min(max(frame, 0), file.length)
+        let remainingFrames = max(file.length - clampedFrame, 0)
+        scheduledStartFrame = clampedFrame
+        pausedFrame = clampedFrame
+        fallbackStartFrame = clampedFrame
+        scheduleToken += 1
+        let token = scheduleToken
+        guard remainingFrames > 0 else {
+            isScheduled = false
+            return
+        }
+        isScheduled = true
+        fallbackPlayerNode.stop()
+        fallbackPlayerNode.scheduleSegment(
+            file,
+            startingFrame: clampedFrame,
+            frameCount: AVAudioFrameCount(min(remainingFrames, AVAudioFramePosition(UInt32.max))),
+            at: nil
+        ) { [weak self] in
+            DispatchQueue.main.async {
+                self?.handlePlaybackCompleted(token: token)
+            }
+        }
+    }
+
     private func handlePlaybackCompleted(token: Int) {
         guard token == scheduleToken, isPlaying, let finishedTrack = loadedTrack else {
             return
@@ -619,6 +689,11 @@ final class NativeAudioEngine {
 
     private func currentFramePosition() -> AVAudioFramePosition {
         guard let file = audioFile else { return 0 }
+        if isFallbackPlayback, isPlaying,
+           let nodeTime = fallbackPlayerNode.lastRenderTime,
+           let playerTime = fallbackPlayerNode.playerTime(forNodeTime: nodeTime) {
+            return min(max(fallbackStartFrame + AVAudioFramePosition(playerTime.sampleTime), 0), file.length)
+        }
         return min(max(pausedFrame, 0), file.length)
     }
 

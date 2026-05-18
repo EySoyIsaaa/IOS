@@ -318,6 +318,25 @@ final class NativeLibraryDatabase {
         bindNullableText(track.originalFormat, to: statement, at: 35)
     }
 
+
+    private func logSavedTrack(_ track: NativeTrack) {
+        let info = playbackFileInfo(path: track.playbackUrl)
+        NSLog("[NativeLibraryDatabase] saved track id=\(track.id) title=\(track.title) optimizationStatus=\(track.optimizationStatus) playbackUrl=\(track.playbackUrl ?? "nil") optimizedUrl=\(track.optimizedUrl ?? "nil")")
+        NSLog("[NativeLibraryDatabase] playback file exists \(info.exists) size=\(info.size)")
+    }
+
+    private func logLoadedTrack(_ track: NativeTrack) {
+        let info = playbackFileInfo(path: track.playbackUrl)
+        NSLog("[NativeLibraryDatabase] loaded track id=\(track.id) title=\(track.title) optimizationStatus=\(track.optimizationStatus) playbackUrl=\(track.playbackUrl ?? "nil") optimizedUrl=\(track.optimizedUrl ?? "nil")")
+        NSLog("[NativeLibraryDatabase] playback file exists \(info.exists) size=\(info.size)")
+    }
+
+    private func playbackFileInfo(path: String?) -> (exists: Bool, size: Int64) {
+        guard let path = path, !path.isEmpty, FileManager.default.fileExists(atPath: path) else { return (false, 0) }
+        let size = Int64((try? URL(fileURLWithPath: path).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        return (true, size)
+    }
+
     private func bindSearch(_ value: String, to statement: OpaquePointer?) {
         let escaped = "%\(value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "%", with: "\\%").replacingOccurrences(of: "_", with: "\\_"))%"
         for index in 1...4 {
