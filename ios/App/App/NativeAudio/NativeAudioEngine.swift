@@ -4,6 +4,10 @@ import Foundation
 final class NativeAudioEngine {
     enum EngineError: Error, LocalizedError {
         case missingLocalFilePath
+        case optimizationNotReady(String)
+        case playbackUrlMissing
+        case playbackFileMissing(String)
+        case engineOpenFailed(String)
         case fileUnavailable(String)
         case noLoadedTrack
         case noPlayableFrames
@@ -17,10 +21,14 @@ final class NativeAudioEngine {
 
         var errorDescription: String? {
             switch self {
-            case .missingLocalFilePath:
-                return "Track does not have a local file path"
-            case .fileUnavailable(let path):
+            case .missingLocalFilePath, .playbackUrlMissing:
+                return "Track does not have a playback URL"
+            case .optimizationNotReady(let message):
+                return message
+            case .playbackFileMissing(let path), .fileUnavailable(let path):
                 return "Audio file is not available at \(path)"
+            case .engineOpenFailed(let message):
+                return message
             case .noLoadedTrack:
                 return "No track is loaded"
             case .noPlayableFrames:
@@ -38,8 +46,14 @@ final class NativeAudioEngine {
 
         var errorCode: String {
             switch self {
-            case .missingLocalFilePath, .fileUnavailable:
-                return "file_unavailable"
+            case .optimizationNotReady:
+                return "optimization_not_ready"
+            case .missingLocalFilePath, .playbackUrlMissing:
+                return "playback_url_missing"
+            case .fileUnavailable, .playbackFileMissing:
+                return "playback_file_missing"
+            case .engineOpenFailed:
+                return "engine_open_failed"
             case .noLoadedTrack:
                 return "no_loaded_track"
             case .noPlayableFrames:
@@ -51,11 +65,11 @@ final class NativeAudioEngine {
             case .bufferAllocationFailed:
                 return "buffer_allocation_failed"
             case .decodeFailed, .decoderError:
-                return "decoder_error"
+                return "decode_failed"
             case .audioFormatError:
                 return "audio_format_error"
             case .engineStartError:
-                return "engine_start_error"
+                return "engine_start_failed"
             }
         }
     }
@@ -135,17 +149,20 @@ final class NativeAudioEngine {
         print("[AudioCompat] metadata completa id=\(track.id) title=\(track.title) codec=\(track.codec ?? "unknown") ext=\(track.originalFormat ?? track.fileExtension) originalSampleRate=\(track.originalSampleRate.map(String.init) ?? "unknown") originalBitDepth=\(track.originalBitDepth.map(String.init) ?? "unknown") originalBitrate=\(track.originalBitrate.map(String.init) ?? "unknown") channels=\(track.channelCount.map(String.init) ?? "unknown") size=\(track.sizeBytes) optimizationStatus=\(track.optimizationStatus)")
         print("[NativeAudioEngine] original metadata shown separately originalUrl=\(track.originalUrl ?? track.sourceUri)")
         guard track.optimizationStatus == "ready" else {
-            print("[NativeAudioEngine] playback aborted safely optimizationStatus=\(track.optimizationStatus) error=\(track.optimizationError ?? "unknown")")
-            throw EngineError.audioFormatError(track.optimizationError ?? "Track is not optimized for playback")
+            let reason = track.optimizationError ?? "Track is not optimized for playback"
+            print("[NativeAudioEngine] playback aborted safely optimizationStatus=\(track.optimizationStatus) error=\(reason)")
+            throw EngineError.optimizationNotReady(reason)
         }
         guard let localFilePath = track.playbackUrl, !localFilePath.isEmpty else {
             print("[NativeAudioEngine] playback aborted safely missing playbackUrl trackId=\(track.id)")
-            throw EngineError.missingLocalFilePath
+            throw EngineError.playbackUrlMissing
         }
+        let fileInfo = NativeAudioEngine.fileInfo(path: localFilePath)
         print("[NativeAudioEngine] using playbackUrl=\(localFilePath) originalUrl=\(track.originalUrl ?? track.sourceUri)")
-        guard FileManager.default.fileExists(atPath: localFilePath) else {
+        print("[NativeAudioEngine] file exists \(fileInfo.exists) size=\(fileInfo.size)")
+        guard fileInfo.exists, fileInfo.size > 0 else {
             print("[NativeAudioEngine] playback aborted safely playbackUrl missing path=\(localFilePath)")
-            throw EngineError.fileUnavailable(localFilePath)
+            throw EngineError.playbackFileMissing(localFilePath)
         }
 
         scheduleToken += 1
@@ -181,6 +198,15 @@ final class NativeAudioEngine {
         }
     }
 
+
+    private static func fileInfo(path: String) -> (exists: Bool, size: Int64) {
+        guard FileManager.default.fileExists(atPath: path) else {
+            return (false, 0)
+        }
+        let size = ((try? URL(fileURLWithPath: path).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        return (true, Int64(size))
+    }
+
     private func loadFullBufferForDSP(track: NativeTrack, localFilePath: String, startAt seconds: Double) throws {
         let file: AVAudioFile
         do {
@@ -190,9 +216,12 @@ final class NativeAudioEngine {
                 interleaved: false
             )
         } catch {
-            print("[NativeAudioEngine] open file failed path=\(localFilePath) error=\(error.localizedDescription)")
-            throw EngineError.audioFormatError(error.localizedDescription)
+            print("[NativeAudioEngine] open failed error=\(error.localizedDescription)")
+            throw EngineError.engineOpenFailed(error.localizedDescription)
         }
+        print("[NativeAudioEngine] open success")
+        print("[NativeAudioEngine] fileFormat=\(file.fileFormat)")
+        print("[NativeAudioEngine] processingFormat=\(file.processingFormat)")
         guard file.processingFormat.sampleRate > 0, file.processingFormat.channelCount > 0 else {
             throw EngineError.audioFormatError("Audio format is missing sample rate or channel count")
         }
@@ -220,7 +249,7 @@ final class NativeAudioEngine {
             try file.read(into: buffer)
         } catch {
             print("[NativeAudioEngine] decode failed error=\(error.localizedDescription)")
-            throw EngineError.decoderError(error.localizedDescription)
+            throw EngineError.decodeFailed(error.localizedDescription)
         }
         audioFile = file
         audioBuffer = buffer
@@ -242,8 +271,8 @@ final class NativeAudioEngine {
         do {
             file = try AVAudioFile(forReading: URL(fileURLWithPath: localFilePath))
         } catch {
-            print("[NativeAudioEngine] open file failed fallback path=\(localFilePath) error=\(error.localizedDescription)")
-            throw EngineError.audioFormatError(error.localizedDescription)
+            print("[NativeAudioEngine] open failed error=\(error.localizedDescription)")
+            throw EngineError.engineOpenFailed(error.localizedDescription)
         }
         guard file.processingFormat.sampleRate > 0, file.processingFormat.channelCount > 0, file.length > 0 else {
             throw EngineError.audioFormatError("Fallback audio format is not playable")
@@ -277,7 +306,7 @@ final class NativeAudioEngine {
                 do {
                     try engine.start()
                 } catch {
-                    print("[NativeAudioEngine] engine start failed fallback error=\(error.localizedDescription)")
+                    print("[NativeAudioEngine] engine start failed error=\(error.localizedDescription)")
                     throw EngineError.engineStartError(error.localizedDescription)
                 }
             }
@@ -351,7 +380,7 @@ final class NativeAudioEngine {
                     do {
                         try engine.start()
                     } catch {
-                        print("[NativeAudioEngine] engine start failed seek fallback error=\(error.localizedDescription)")
+                        print("[NativeAudioEngine] engine start failed error=\(error.localizedDescription)")
                         throw EngineError.engineStartError(error.localizedDescription)
                     }
                 }
@@ -369,7 +398,7 @@ final class NativeAudioEngine {
                 do {
                     try engine.start()
                 } catch {
-                    print("[NativeAudioEngine] engine start failed seek error=\(error.localizedDescription)")
+                    print("[NativeAudioEngine] engine start failed error=\(error.localizedDescription)")
                     throw EngineError.engineStartError(error.localizedDescription)
                 }
             }

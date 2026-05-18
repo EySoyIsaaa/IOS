@@ -98,8 +98,8 @@ export interface QueueController {
   shuffleAll: (tracks: Track[], firstTrackId?: string) => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
   playTrack: (index: number) => void;
-  nextTrack: () => void;
-  previousTrack: () => void;
+  nextTrack: (requestId?: string) => void;
+  previousTrack: (requestId?: string) => void;
   syncCurrentTrackById: (trackId: string) => void;
   persistEphemeralTrack: (trackId: string) => Promise<boolean>;
   addTrack: (file: File) => Promise<void>;
@@ -338,31 +338,21 @@ export function useAudioQueue(): QueueController {
     void setNativeQueue(shuffled, 0);
   }, []);
 
-  const nextTrack = useCallback(() => {
-    const before = currentTrackIndex;
-    const after = before < queue.length - 1 ? before + 1 : before;
-    console.info("[Queue] next requested", {
-      before,
-      after,
+  const nextTrack = useCallback((requestId = `webqueue-next-${Date.now()}`) => {
+    console.info(`[WebQueue] nextTrack called requestId=${requestId} platform=ios action=delegating-to-native`, {
+      currentIndex: currentTrackIndex,
       queueLength: queue.length,
     });
-    if (after !== before) {
-      moveToQueueIndex(after, "next");
-    }
-  }, [currentTrackIndex, moveToQueueIndex, queue.length]);
+    void EpicenterNative.next({ requestId });
+  }, [currentTrackIndex, queue.length]);
 
-  const previousTrack = useCallback(() => {
-    const before = currentTrackIndex;
-    const after = before > 0 ? before - 1 : before;
-    console.info("[Queue] previous requested", {
-      before,
-      after,
+  const previousTrack = useCallback((requestId = `webqueue-previous-${Date.now()}`) => {
+    console.info(`[WebQueue] previousTrack called requestId=${requestId} platform=ios action=delegating-to-native`, {
+      currentIndex: currentTrackIndex,
       queueLength: queue.length,
     });
-    if (after !== before) {
-      moveToQueueIndex(after, "previous");
-    }
-  }, [currentTrackIndex, moveToQueueIndex, queue.length]);
+    void EpicenterNative.previous({ requestId });
+  }, [currentTrackIndex, queue.length]);
 
   const syncCurrentTrackById = useCallback(
     (trackId: string) => {

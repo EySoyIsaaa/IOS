@@ -50,8 +50,10 @@ final class NativeLibraryDatabase {
                 id, stable_id, title, artist, album, duration_ms, file_name, file_extension,
                 source_uri, bookmark_data, local_file_path, source_type, added_at, updated_at,
                 size_bytes, sample_rate, bit_depth, bitrate, channel_count, album_art_uri,
-                is_available, play_count, last_played_at, codec, quality_class
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                is_available, play_count, last_played_at, codec, quality_class,
+                original_url, playback_url, optimized_url, optimized_for_playback, optimization_status,
+                optimization_error, original_bit_depth, original_sample_rate, original_bitrate, original_format
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(stable_id) DO UPDATE SET
                 title = excluded.title,
                 artist = excluded.artist,
@@ -72,7 +74,17 @@ final class NativeLibraryDatabase {
                 bitrate = excluded.bitrate,
                 channel_count = excluded.channel_count,
                 album_art_uri = excluded.album_art_uri,
-                is_available = excluded.is_available
+                is_available = excluded.is_available,
+                original_url = excluded.original_url,
+                playback_url = excluded.playback_url,
+                optimized_url = excluded.optimized_url,
+                optimized_for_playback = excluded.optimized_for_playback,
+                optimization_status = excluded.optimization_status,
+                optimization_error = excluded.optimization_error,
+                original_bit_depth = excluded.original_bit_depth,
+                original_sample_rate = excluded.original_sample_rate,
+                original_bitrate = excluded.original_bitrate,
+                original_format = excluded.original_format
             """
             let statement = try prepare(sql)
             defer { sqlite3_finalize(statement) }
@@ -80,6 +92,7 @@ final class NativeLibraryDatabase {
             guard sqlite3_step(statement) == SQLITE_DONE else {
                 throw DatabaseError.stepFailed(lastErrorMessage())
             }
+            logTrackFile(prefix: "saved", track: track)
         }
     }
 
@@ -201,7 +214,17 @@ final class NativeLibraryDatabase {
             play_count INTEGER NOT NULL DEFAULT 0,
             last_played_at TEXT,
             codec TEXT,
-            quality_class TEXT
+            quality_class TEXT,
+            original_url TEXT,
+            playback_url TEXT,
+            optimized_url TEXT,
+            optimized_for_playback INTEGER NOT NULL DEFAULT 0,
+            optimization_status TEXT NOT NULL DEFAULT 'ready',
+            optimization_error TEXT,
+            original_bit_depth INTEGER,
+            original_sample_rate INTEGER,
+            original_bitrate INTEGER,
+            original_format TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_tracks_title ON tracks(title COLLATE NOCASE);
         CREATE INDEX IF NOT EXISTS idx_tracks_artist ON tracks(artist COLLATE NOCASE);
@@ -210,6 +233,16 @@ final class NativeLibraryDatabase {
         CREATE INDEX IF NOT EXISTS idx_tracks_updated_at ON tracks(updated_at);
         ALTER TABLE tracks ADD COLUMN codec TEXT;
         ALTER TABLE tracks ADD COLUMN quality_class TEXT;
+        ALTER TABLE tracks ADD COLUMN original_url TEXT;
+        ALTER TABLE tracks ADD COLUMN playback_url TEXT;
+        ALTER TABLE tracks ADD COLUMN optimized_url TEXT;
+        ALTER TABLE tracks ADD COLUMN optimized_for_playback INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE tracks ADD COLUMN optimization_status TEXT NOT NULL DEFAULT 'ready';
+        ALTER TABLE tracks ADD COLUMN optimization_error TEXT;
+        ALTER TABLE tracks ADD COLUMN original_bit_depth INTEGER;
+        ALTER TABLE tracks ADD COLUMN original_sample_rate INTEGER;
+        ALTER TABLE tracks ADD COLUMN original_bitrate INTEGER;
+        ALTER TABLE tracks ADD COLUMN original_format TEXT;
         """
         let statements = sql
             .split(separator: ";")
@@ -221,6 +254,20 @@ final class NativeLibraryDatabase {
                 if !statement.uppercased().hasPrefix("ALTER TABLE") || !message.localizedCaseInsensitiveContains("duplicate column") {
                     throw DatabaseError.stepFailed(message)
                 }
+            }
+        }
+        let backfillStatements = [
+            "UPDATE tracks SET original_url = source_uri WHERE original_url IS NULL OR original_url = ''",
+            "UPDATE tracks SET playback_url = local_file_path WHERE playback_url IS NULL OR playback_url = ''",
+            "UPDATE tracks SET optimization_status = 'ready' WHERE optimization_status IS NULL OR optimization_status = ''",
+            "UPDATE tracks SET original_bit_depth = bit_depth WHERE original_bit_depth IS NULL AND bit_depth IS NOT NULL",
+            "UPDATE tracks SET original_sample_rate = sample_rate WHERE original_sample_rate IS NULL AND sample_rate IS NOT NULL",
+            "UPDATE tracks SET original_bitrate = bitrate WHERE original_bitrate IS NULL AND bitrate IS NOT NULL",
+            "UPDATE tracks SET original_format = file_extension WHERE original_format IS NULL OR original_format = ''",
+        ]
+        for statement in backfillStatements {
+            if sqlite3_exec(db, statement, nil, nil, nil) != SQLITE_OK {
+                throw DatabaseError.stepFailed(lastErrorMessage())
             }
         }
     }
@@ -259,6 +306,16 @@ final class NativeLibraryDatabase {
         bindNullableText(track.lastPlayedAt.map { NativeTrack.dateFormatter.string(from: $0) }, to: statement, at: 23)
         bindNullableText(track.codec, to: statement, at: 24)
         bindNullableText(track.qualityClass, to: statement, at: 25)
+        bindNullableText(track.originalUrl, to: statement, at: 26)
+        bindNullableText(track.playbackUrl, to: statement, at: 27)
+        bindNullableText(track.optimizedUrl, to: statement, at: 28)
+        sqlite3_bind_int(statement, 29, track.optimizedForPlayback ? 1 : 0)
+        bindText(track.optimizationStatus, to: statement, at: 30)
+        bindNullableText(track.optimizationError, to: statement, at: 31)
+        bindNullableInt(track.originalBitDepth, to: statement, at: 32)
+        bindNullableInt(track.originalSampleRate, to: statement, at: 33)
+        bindNullableInt(track.originalBitrate, to: statement, at: 34)
+        bindNullableText(track.originalFormat, to: statement, at: 35)
     }
 
     private func bindSearch(_ value: String, to statement: OpaquePointer?) {
@@ -314,7 +371,7 @@ final class NativeLibraryDatabase {
     }
 
     private func readTrack(from statement: OpaquePointer?) -> NativeTrack {
-        NativeTrack(
+        let track = NativeTrack(
             id: text(statement, 0) ?? UUID().uuidString,
             stableId: text(statement, 1) ?? "",
             title: text(statement, 2) ?? "Unknown Title",
@@ -326,6 +383,16 @@ final class NativeLibraryDatabase {
             codec: text(statement, 23),
             qualityClass: text(statement, 24),
             sourceUri: text(statement, 8) ?? "",
+            originalUrl: text(statement, 25) ?? text(statement, 8),
+            playbackUrl: text(statement, 26) ?? text(statement, 10),
+            optimizedUrl: text(statement, 27),
+            optimizedForPlayback: sqlite3_column_int(statement, 28) == 1,
+            optimizationStatus: text(statement, 29) ?? "ready",
+            optimizationError: text(statement, 30),
+            originalBitDepth: nullableInt(statement, 31) ?? nullableInt(statement, 16),
+            originalSampleRate: nullableInt(statement, 32) ?? nullableInt(statement, 15),
+            originalBitrate: nullableInt(statement, 33) ?? nullableInt(statement, 17),
+            originalFormat: text(statement, 34) ?? text(statement, 7),
             bookmarkData: data(statement, 9),
             localFilePath: text(statement, 10),
             sourceType: text(statement, 11) ?? NativeTrackSourceType.manualIOS.rawValue,
@@ -341,6 +408,24 @@ final class NativeLibraryDatabase {
             playCount: Int(sqlite3_column_int(statement, 21)),
             lastPlayedAt: date(statement, 22)
         )
+        logTrackFile(prefix: "loaded", track: track)
+        return track
+    }
+
+
+    private func logTrackFile(prefix: String, track: NativeTrack) {
+        let path = track.playbackUrl
+        let info = playbackFileInfo(path: path)
+        NSLog("[NativeLibraryDatabase] \(prefix) track id=\(track.id) title=\(track.title) optimizationStatus=\(track.optimizationStatus) playbackUrl=\(path ?? "nil") optimizedUrl=\(track.optimizedUrl ?? "nil")")
+        NSLog("[NativeLibraryDatabase] playback file exists \(info.exists) size=\(info.size)")
+    }
+
+    private func playbackFileInfo(path: String?) -> (exists: Bool, size: Int64) {
+        guard let path = path, !path.isEmpty, FileManager.default.fileExists(atPath: path) else {
+            return (false, 0)
+        }
+        let size = ((try? URL(fileURLWithPath: path).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        return (true, Int64(size))
     }
 
     private func text(_ statement: OpaquePointer?, _ index: Int32) -> String? {
