@@ -140,6 +140,8 @@ export interface IOSNativePlaybackErrorEvent {
 
 export interface IOSNativeCurrentTrackChangedEvent {
   status: IOSNativeAudioStatus;
+  requestId?: string;
+  index?: number;
   track: IOSNativeTrack;
   requestId?: string;
 }
