@@ -259,6 +259,26 @@ final class NativeTrackImporter: NSObject, UIDocumentPickerDelegate {
     }
 
     private func fileInfo(at url: URL) -> (exists: Bool, size: Int64) {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return (false, 0)
+        }
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        return (true, Int64(size))
+    }
+
+
+    private func validateOptimizedOutput(at url: URL) throws {
+        let outputFile = try AVAudioFile(forReading: url)
+        guard outputFile.length > 0 else {
+            throw NSError(domain: "ImportOptimizer", code: 9, userInfo: [NSLocalizedDescriptionKey: "Optimized output has no playable frames"])
+        }
+        let format = outputFile.processingFormat
+        guard Int(format.sampleRate.rounded()) == 44_100, format.channelCount == 2 else {
+            throw NSError(domain: "ImportOptimizer", code: 10, userInfo: [NSLocalizedDescriptionKey: "Optimized output format is not 44.1kHz stereo"])
+        }
+    }
+
+    private func fileInfo(at url: URL) -> (exists: Bool, size: Int64) {
         guard FileManager.default.fileExists(atPath: url.path) else { return (false, 0) }
         let size = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
         return (true, size)

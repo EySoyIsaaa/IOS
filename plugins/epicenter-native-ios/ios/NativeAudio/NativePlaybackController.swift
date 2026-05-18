@@ -360,6 +360,30 @@ final class NativePlaybackController {
         return track
     }
 
+    private func validateStandaloneTrack(_ track: NativeTrack, requestId: String) -> Bool {
+        guard !temporarilyFailedTrackIds.contains(track.id) else {
+            print("[NativeQueue] skipping failed standalone track id=\(track.id)")
+            return false
+        }
+        guard track.optimizationStatus == "ready" else {
+            print("[NativePlaybackController] reject reason=optimization_not_ready requestId=\(requestId) trackId=\(track.id) status=\(track.optimizationStatus) error=\(track.optimizationError ?? "nil")")
+            temporarilyFailedTrackIds.insert(track.id)
+            return false
+        }
+        guard let playbackUrl = track.playbackUrl, !playbackUrl.isEmpty else {
+            print("[NativePlaybackController] reject reason=playback_url_missing requestId=\(requestId) trackId=\(track.id)")
+            temporarilyFailedTrackIds.insert(track.id)
+            return false
+        }
+        let info = playbackFileInfo(path: playbackUrl)
+        guard info.exists, info.size > 0 else {
+            print("[NativePlaybackController] reject reason=playback_file_missing requestId=\(requestId) trackId=\(track.id) path=\(playbackUrl) exists=\(info.exists) size=\(info.size)")
+            temporarilyFailedTrackIds.insert(track.id)
+            return false
+        }
+        return true
+    }
+
     private func loadTrack(_ track: NativeTrack, at index: Int, requestId: String, shouldRestartLoadedTrack: Bool, skipOnFailure: Bool, replaceQueueOnSuccess: [String]? = nil) -> [String: Any] {
         print("[NativePlaybackController] will load id=\(track.id) title=\(track.title) optimizationStatus=\(track.optimizationStatus) playbackUrl=\(track.playbackUrl ?? "nil") optimizedUrl=\(track.optimizedUrl ?? "nil") originalUrl=\(track.originalUrl ?? track.sourceUri)")
         print("[NativePlaybackController] load requestId=\(requestId) trackId=\(track.id)")
@@ -415,8 +439,8 @@ final class NativePlaybackController {
 
     private func handlePlaybackFailure(code: String, message: String, trackId: String, originalRequestId: String, skipOnFailure: Bool) -> [String: Any] {
         temporarilyFailedTrackIds.insert(trackId)
-        let errorResponse = playbackErrorResponse(code: code, message: message, trackId: trackId, requestId: originalRequestId)
-        guard skipOnFailure else { return errorResponse }
+        let failureResponse = playbackErrorResponse(code: code, message: message, trackId: trackId, requestId: originalRequestId)
+        guard skipOnFailure else { return failureResponse }
         print("[NativeQueue] failure skip requested originalRequestId=\(originalRequestId) failedTrackId=\(trackId)")
         while let recovery = recoveryCandidate(after: trackId, originalRequestId: originalRequestId) {
             print("[NativeQueue] skip failed track originalRequestId=\(originalRequestId) failedTrackId=\(trackId) nextCandidateId=\(recovery.track.id)")
@@ -430,7 +454,7 @@ final class NativePlaybackController {
         }
         print("[NativeQueue] recovery ended requestId=\(originalRequestId)")
         temporarilyFailedTrackIds.removeAll()
-        return errorResponse
+        return failureResponse
     }
 
     private func recoveryCandidate(after failedTrackId: String, originalRequestId: String) -> (index: Int, track: NativeTrack)? {

@@ -290,11 +290,12 @@ final class NativeAudioEngine {
     }
 
     func seek(to seconds: Double) throws {
-        guard let file = audioFile else {
+        guard let audioFile = audioFile else {
             throw EngineError.noLoadedTrack
         }
         let wasPlaying = isPlaying
-        let targetFrame = framePosition(for: seconds, in: file)
+        let safeSeconds = max(seconds, 0)
+        let targetFrame = AVAudioFramePosition(safeSeconds * audioFile.processingFormat.sampleRate)
         scheduleToken += 1
         isPlaying = false
         isScheduled = false
