@@ -92,6 +92,7 @@ final class NativeLibraryDatabase {
             guard sqlite3_step(statement) == SQLITE_DONE else {
                 throw DatabaseError.stepFailed(lastErrorMessage())
             }
+            logTrackFile(prefix: "saved", track: track)
         }
     }
 
@@ -255,6 +256,20 @@ final class NativeLibraryDatabase {
                 }
             }
         }
+        let backfillStatements = [
+            "UPDATE tracks SET original_url = source_uri WHERE original_url IS NULL OR original_url = ''",
+            "UPDATE tracks SET playback_url = local_file_path WHERE playback_url IS NULL OR playback_url = ''",
+            "UPDATE tracks SET optimization_status = 'ready' WHERE optimization_status IS NULL OR optimization_status = ''",
+            "UPDATE tracks SET original_bit_depth = bit_depth WHERE original_bit_depth IS NULL AND bit_depth IS NOT NULL",
+            "UPDATE tracks SET original_sample_rate = sample_rate WHERE original_sample_rate IS NULL AND sample_rate IS NOT NULL",
+            "UPDATE tracks SET original_bitrate = bitrate WHERE original_bitrate IS NULL AND bitrate IS NOT NULL",
+            "UPDATE tracks SET original_format = file_extension WHERE original_format IS NULL OR original_format = ''",
+        ]
+        for statement in backfillStatements {
+            if sqlite3_exec(db, statement, nil, nil, nil) != SQLITE_OK {
+                throw DatabaseError.stepFailed(lastErrorMessage())
+            }
+        }
     }
 
     private func prepare(_ sql: String) throws -> OpaquePointer? {
@@ -356,7 +371,7 @@ final class NativeLibraryDatabase {
     }
 
     private func readTrack(from statement: OpaquePointer?) -> NativeTrack {
-        NativeTrack(
+        let track = NativeTrack(
             id: text(statement, 0) ?? UUID().uuidString,
             stableId: text(statement, 1) ?? "",
             title: text(statement, 2) ?? "Unknown Title",
@@ -393,6 +408,24 @@ final class NativeLibraryDatabase {
             playCount: Int(sqlite3_column_int(statement, 21)),
             lastPlayedAt: date(statement, 22)
         )
+        logTrackFile(prefix: "loaded", track: track)
+        return track
+    }
+
+
+    private func logTrackFile(prefix: String, track: NativeTrack) {
+        let path = track.playbackUrl
+        let info = playbackFileInfo(path: path)
+        NSLog("[NativeLibraryDatabase] \(prefix) track id=\(track.id) title=\(track.title) optimizationStatus=\(track.optimizationStatus) playbackUrl=\(path ?? "nil") optimizedUrl=\(track.optimizedUrl ?? "nil")")
+        NSLog("[NativeLibraryDatabase] playback file exists \(info.exists) size=\(info.size)")
+    }
+
+    private func playbackFileInfo(path: String?) -> (exists: Bool, size: Int64) {
+        guard let path = path, !path.isEmpty, FileManager.default.fileExists(atPath: path) else {
+            return (false, 0)
+        }
+        let size = ((try? URL(fileURLWithPath: path).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        return (true, Int64(size))
     }
 
     private func text(_ statement: OpaquePointer?, _ index: Int32) -> String? {

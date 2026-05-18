@@ -162,11 +162,17 @@ const getAudioCompatibilityUnsupportedReason = (
     qualityClass: track.qualityClass,
   });
 
-  if (bitDepth && bitDepth > MAX_SAFE_DSP_BIT_DEPTH) {
+  const hasPreparedPlaybackFile =
+    track.optimizedForPlayback === true &&
+    track.optimizationStatus === "ready" &&
+    typeof track.playbackUrl === "string" &&
+    track.playbackUrl.length > 0;
+
+  if (!hasPreparedPlaybackFile && bitDepth && bitDepth > MAX_SAFE_DSP_BIT_DEPTH) {
     return `bitDepth ${bitDepth} exceeds ${MAX_SAFE_DSP_BIT_DEPTH}`;
   }
 
-  if (sampleRate && sampleRate > MAX_SAFE_DSP_SAMPLE_RATE) {
+  if (!hasPreparedPlaybackFile && sampleRate && sampleRate > MAX_SAFE_DSP_SAMPLE_RATE) {
     return `sampleRate ${sampleRate} exceeds ${MAX_SAFE_DSP_SAMPLE_RATE}`;
   }
 
@@ -416,20 +422,16 @@ export default function Home() {
         | "autoplay"
         | "unsupported-skip" = "ui",
     ) => {
-      console.info(
-        source === "media-session"
-          ? "[MediaSession] next requested"
-          : "[Queue] next requested",
-        {
-          source,
-          currentIndex: queue.currentTrackIndex,
-          queueLength: queue.queue.length,
-          currentTrackId: queue.currentTrack?.id,
-        },
-      );
+      const requestId = `ui-next-${Date.now()}`;
+      console.info(`[UI] next click requestId=${requestId}`, {
+        source,
+        currentIndex: queue.currentTrackIndex,
+        queueLength: queue.queue.length,
+        currentTrackId: queue.currentTrack?.id,
+      });
       playbackReasonRef.current =
         source === "unsupported-skip" ? "unsupported-skip" : "next";
-      void audioProcessor.next();
+      void audioProcessor.next(requestId);
     },
     [
       audioProcessor,
@@ -441,19 +443,15 @@ export default function Home() {
 
   const handlePreviousTrack = useCallback(
     (source: "media-session" | "notification" | "ui" = "ui") => {
-      console.info(
-        source === "media-session"
-          ? "[MediaSession] previous requested"
-          : "[Queue] previous requested",
-        {
-          source,
-          currentIndex: queue.currentTrackIndex,
-          queueLength: queue.queue.length,
-          currentTrackId: queue.currentTrack?.id,
-        },
-      );
+      const requestId = `ui-previous-${Date.now()}`;
+      console.info(`[UI] previous click requestId=${requestId}`, {
+        source,
+        currentIndex: queue.currentTrackIndex,
+        queueLength: queue.queue.length,
+        currentTrackId: queue.currentTrack?.id,
+      });
       playbackReasonRef.current = "previous";
-      void audioProcessor.previous();
+      void audioProcessor.previous(requestId);
     },
     [
       audioProcessor,
