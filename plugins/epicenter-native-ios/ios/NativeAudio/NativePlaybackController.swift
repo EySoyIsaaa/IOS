@@ -302,6 +302,15 @@ final class NativePlaybackController {
             }
             return response
         }
+        print("[NativePlaybackController] load track playbackUrl=\(track.playbackUrl ?? "nil") originalUrl=\(track.originalUrl ?? track.sourceUri)")
+        guard track.optimizationStatus == "ready", let playbackUrl = track.playbackUrl, !playbackUrl.isEmpty else {
+            return handlePlaybackFailure(
+                code: "playback_url_unavailable",
+                message: track.optimizationError ?? "Track playbackUrl is not ready",
+                trackId: requestedTrackId,
+                skipOnFailure: skipOnFailure
+            )
+        }
 
         do {
             try sessionManager.activate()
